@@ -2,15 +2,16 @@
 <html lang="pt-br">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Pro · Controle de Vendas</title>
-
     <link rel="stylesheet" href="./css/index.css" />
   </head>
   <body>
+    <div class="boot-loader" id="loader">
+      <div class="spin"></div>
+      <span>Cargando…</span>
+    </div>
+
     <div class="app">
       <div class="backdrop" id="backdrop" onclick="fecharMenu()"></div>
 
@@ -19,122 +20,116 @@
           <div class="brand-mark">P</div>
           <div class="brand-name">Pro Vendas</div>
         </div>
-        <button
-          class="nav-item ativo"
-          data-tela="dashboard"
-          onclick="trocarTela('dashboard')"
-        >
+        <button class="nav-item ativo" data-tela="dashboard" onclick="trocarTela('dashboard')">
           <span class="nav-icon">◧</span>Dashboard
         </button>
-        <button
-          class="nav-item"
-          data-tela="vendas"
-          onclick="trocarTela('vendas')"
-        >
+        <button class="nav-item" data-tela="vendas" onclick="trocarTela('vendas')">
           <span class="nav-icon">↗</span>Vendas
         </button>
-        <button
-          class="nav-item"
-          data-tela="produtos"
-          onclick="trocarTela('produtos')"
-        >
+        <button class="nav-item" data-tela="historico" onclick="trocarTela('historico')">
+          <span class="nav-icon">≣</span>Histórico
+        </button>
+        <button class="nav-item" data-tela="produtos" onclick="trocarTela('produtos')">
           <span class="nav-icon">▤</span>Produtos
         </button>
-        <button
-          class="nav-item"
-          data-tela="vendedores"
-          onclick="trocarTela('vendedores')"
-        >
+        <button class="nav-item" data-tela="vendedores" onclick="trocarTela('vendedores')">
           <span class="nav-icon">◔</span>Vendedores
         </button>
-        <div class="sidebar-footer">Dados salvos neste dispositivo</div>
+        <div class="sidebar-footer">Dados guardados neste dispositivo</div>
       </aside>
 
       <div class="content">
         <div class="topbar">
-          <button
-            class="menu-btn"
-            onclick="abrirMenu()"
-            aria-label="Abrir menu"
-          >
+          <button class="menu-btn" onclick="abrirMenu()" aria-label="Abrir menu">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <path
-                d="M3 5h14M3 10h14M3 15h14"
-                stroke="currentColor"
-                stroke-width="1.6"
-                stroke-linecap="round"
-              />
+              <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
             </svg>
           </button>
           <h1 id="tituloTela">Dashboard</h1>
-          <span class="sub" id="subTitulo">Visão geral do dia</span>
+          <span class="sub" id="subTitulo">Visão geral do negócio</span>
         </div>
 
         <main>
+
           <!-- DASHBOARD -->
           <section id="dashboard" class="tela ativa">
-            <div class="grid-cards">
-              <div class="stat-card">
-                <div class="label">Total vendido</div>
-                <div class="value" id="total">R$ 0,00</div>
-              </div>
-              <div class="stat-card">
-                <div class="label">Vendas</div>
-                <div class="value" id="qtd">0</div>
-              </div>
-              <div class="stat-card">
-                <div class="label">Mais vendido</div>
-                <div class="value small" id="maisVendido">—</div>
-              </div>
-              <div class="stat-card">
-                <div class="label">Vendedor do dia</div>
-                <div class="value small" id="vendedorDia">—</div>
-              </div>
-            </div>
+            <div class="grid-cards" id="gridCards"></div>
 
             <div class="meta-panel">
               <div class="meta-top">
                 <div>
-                  <div class="label">Meta de hoje</div>
+                  <div class="label">Meta de hoy</div>
                   <div class="meta-numbers">
-                    <span id="metaAtual">R$ 0,00</span>
-                    <span>/ R$ <span id="metaAlvo">0,00</span></span>
+                    <span id="metaDiaAtual">R$ 0,00</span>
+                    <span>/ R$ <span id="metaDiaAlvo">0,00</span></span>
                   </div>
                 </div>
                 <div style="text-align: right">
-                  <div class="meta-pct" id="metaPct">0%</div>
-                  <div class="meta-status" id="metaStatus">
-                    Sem meta definida
-                  </div>
+                  <div class="meta-pct" id="metaDiaPct">0%</div>
+                  <div class="meta-status" id="metaDiaStatus">Sem meta definida</div>
                 </div>
               </div>
-              <div class="barra-container"><div id="barraProgresso"></div></div>
-              <div class="hint" id="metaFaltam" style="margin-top: 6px"></div>
+              <div class="barra-container"><div id="barraMetaDia"></div></div>
+              <div class="hint" id="metaDiaFaltam" style="margin-top: 6px"></div>
+
+              <div class="meta-top" style="margin-top: 18px">
+                <div>
+                  <div class="label">Meta del mes</div>
+                  <div class="meta-numbers">
+                    <span id="metaMesAtual">R$ 0,00</span>
+                    <span>/ R$ <span id="metaMesAlvo">0,00</span></span>
+                  </div>
+                </div>
+                <div style="text-align: right">
+                  <div class="meta-pct" id="metaMesPct">0%</div>
+                  <div class="meta-status" id="metaMesStatus">Sem meta definida</div>
+                </div>
+              </div>
+              <div class="barra-container"><div id="barraMetaMes"></div></div>
+              <div class="hint" id="metaMesFaltam" style="margin-top: 6px"></div>
+
               <div class="meta-edit">
-                <input
-                  type="number"
-                  id="metaInput"
-                  placeholder="Definir meta do dia (R$)"
-                  min="0"
-                  step="0.01"
-                />
-                <button class="btn btn-primary" onclick="definirMeta()">
-                  Salvar meta
-                </button>
+                <input type="number" id="metaDiaInput" placeholder="Meta diária (R$)" min="0" step="0.01" />
+                <input type="number" id="metaMesInput" placeholder="Meta mensal (R$)" min="0" step="0.01" />
+                <button class="btn btn-primary" onclick="guardarMetas()">Guardar metas</button>
+                <button class="btn" onclick="quitarMetas()">Quitar</button>
               </div>
             </div>
 
             <div class="dashboard-charts">
               <div class="chart-card">
-                <h3>Produtos mais vendidos</h3>
+                <h3>Faturamento por día</h3>
                 <div class="chart-wrap">
-                  <canvas id="graficoProdutos"></canvas>
+                  <canvas id="graficoFaturamentoDia"></canvas>
+                  <div class="chart-empty" id="vacioGraficoFaturamentoDia"></div>
+                </div>
+              </div>
+              <div class="chart-card">
+                <h3>Vendas por período</h3>
+                <div class="chart-wrap">
+                  <canvas id="graficoPeriodo"></canvas>
+                  <div class="chart-empty" id="vacioGraficoPeriodo"></div>
                 </div>
               </div>
               <div class="chart-card">
                 <h3>Vendas por vendedor</h3>
                 <div class="chart-wrap">
                   <canvas id="graficoVendedores"></canvas>
+                  <div class="chart-empty" id="vacioGraficoVendedores"></div>
+                </div>
+              </div>
+              <div class="chart-card">
+                <h3>Productos más vendidos</h3>
+                <div class="chart-wrap">
+                  <canvas id="graficoProductos"></canvas>
+                  <div class="chart-empty" id="vacioGraficoProductos"></div>
+                </div>
+              </div>
+              <div class="chart-card">
+                <h3>Distribución por forma de pago</h3>
+                <div class="chart-wrap">
+                  <canvas id="graficoPagos"></canvas>
+                  <div class="chart-empty" id="vacioGraficoPagos"></div>
                 </div>
               </div>
             </div>
@@ -144,88 +139,139 @@
           <section id="vendas" class="tela">
             <div class="section-head">
               <div>
-                <h2>Vendas</h2>
-                <div class="desc">Registre e acompanhe as vendas do dia</div>
+                <h2>Registrar venta</h2>
+                <div class="desc">Totales automáticos: Cantidad × Valor unitario − Descuento = Valor final</div>
+              </div>
+              <button class="btn" onclick="trocarTela('historico')">Ver histórico →</button>
+            </div>
+
+            <div class="panel-form">
+              <div class="grid-form" id="formVentaNueva"></div>
+              <div class="btn-row">
+                <button class="btn btn-primary" onclick="guardarNuevaVenta()">Cadastrar venta</button>
+                <button class="btn" onclick="limpiarFormularioVenta('nueva')">Limpiar formulario</button>
               </div>
             </div>
 
-            <div class="toolbar">
-              <div class="field">
-                <label>Produto</label>
-                <select id="produto"></select>
+            <h3 class="sub-seccion">Últimas ventas</h3>
+            <div id="listaRecientes" class="list"></div>
+          </section>
+
+          <!-- HISTÓRICO -->
+          <section id="historico" class="tela">
+            <div class="section-head">
+              <div>
+                <h2>Histórico de ventas</h2>
+                <div class="desc">Busca, filtra y gestiona todas las ventas registradas</div>
+              </div>
+            </div>
+
+            <div class="toolbar filtros">
+              <div class="field search-field">
+                <label>Buscar</label>
+                <input type="text" id="hisBusca" placeholder="Produto, vendedor, obs…" oninput="atualizarHistorico()" />
               </div>
               <div class="field">
-                <label>Valor (R$)</label>
-                <input
-                  type="number"
-                  id="valor"
-                  min="0"
-                  step="0.01"
-                  placeholder="0,00"
-                />
+                <label>Desde</label>
+                <input type="date" id="hisDesde" onchange="atualizarHistorico()" />
+              </div>
+              <div class="field">
+                <label>Hasta</label>
+                <input type="date" id="hisHasta" onchange="atualizarHistorico()" />
               </div>
               <div class="field">
                 <label>Vendedor</label>
-                <select id="vendedorSelect"></select>
+                <select id="hisVendedor" onchange="atualizarHistorico()"></select>
               </div>
-              <button class="btn btn-primary" onclick="addVenda()">
-                Cadastrar venda
-              </button>
+              <div class="field">
+                <label>Producto</label>
+                <select id="hisProducto" onchange="atualizarHistorico()"></select>
+              </div>
+              <div class="field">
+                <label>Pago</label>
+                <select id="hisPago" onchange="atualizarHistorico()"></select>
+              </div>
+              <div class="field">
+                <label>Orden</label>
+                <select id="hisOrden" onchange="atualizarHistorico()">
+                  <option value="reciente">Más recientes</option>
+                  <option value="antiguo">Más antiguas</option>
+                  <option value="valorMayor">Mayor valor</option>
+                  <option value="valorMenor">Menor valor</option>
+                  <option value="produtoAsc">Producto A–Z</option>
+                </select>
+              </div>
+              <div class="field filter-acciones">
+                <label>&nbsp;</label>
+                <div class="btn-row" style="margin-top: 0">
+                  <button class="btn" onclick="limpiarFiltrosHistorico()">Limpiar filtros</button>
+                  <button class="btn btn-danger-ghost" onclick="eliminarTodasVentas()">Eliminar todo</button>
+                </div>
+              </div>
             </div>
 
-            <div class="toolbar" style="margin-bottom: 12px">
-              <div class="field search-field">
-                <label>Buscar</label>
-                <input
-                  type="text"
-                  id="buscaVenda"
-                  placeholder="Produto ou vendedor…"
-                  oninput="atualizarVendas()"
-                />
-              </div>
-              <button class="btn btn-danger-ghost" onclick="limparVendas()">
-                Limpar tudo
-              </button>
+            <div class="his-info" id="hisInfo">—</div>
+
+            <div class="tabla-scroll">
+              <table class="tabla">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Producto</th>
+                    <th class="num">Cant.</th>
+                    <th>Vendedor</th>
+                    <th>Pago</th>
+                    <th class="num">Valor</th>
+                    <th>Estado</th>
+                    <th class="acciones">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="cuerpoHistorico"></tbody>
+              </table>
             </div>
 
-            <div id="listaVendas" class="list"></div>
+            <div class="paginacion">
+              <button class="btn btn-sm" id="hisPrev" onclick="cambiarPaginaHistorico(-1)">← Anterior</button>
+              <span class="paginacion-info" id="hisPaginaInfo"></span>
+              <button class="btn btn-sm" id="hisNext" onclick="cambiarPaginaHistorico(1)">Siguiente →</button>
+            </div>
           </section>
 
-          <!-- PRODUTOS -->
+          <!-- PRODUCTOS -->
           <section id="produtos" class="tela">
             <div class="section-head">
               <div>
-                <h2>Produtos</h2>
-                <div class="desc">Catálogo usado nas vendas</div>
+                <h2>Productos</h2>
+                <div class="desc">Catálogo con precios, margen y control de stock</div>
               </div>
+              <button class="btn btn-primary" onclick="abrirModalProducto()">+ Nuevo producto</button>
             </div>
+
+            <div class="aviso-stock" id="avisoStockBajo"></div>
 
             <div class="toolbar">
-              <div class="field" style="flex: 1.4">
-                <label>Nome do produto</label>
-                <input
-                  type="text"
-                  id="nomeProduto"
-                  placeholder="Ex: Relógio Seiko 5"
-                />
-                <div class="erro-msg" id="erroProduto"></div>
+              <div class="field search-field">
+                <label>Buscar</label>
+                <input type="text" id="buscaProducto" placeholder="Nombre, SKU o marca…" oninput="atualizarProductos()" />
               </div>
-              <button class="btn btn-primary" onclick="addProduto()">
-                Adicionar
-              </button>
+              <div class="field">
+                <label>Categoría</label>
+                <select id="filtroCategoria" onchange="atualizarProductos()"></select>
+              </div>
+              <div class="field">
+                <label>Stock</label>
+                <select id="filtroStock" onchange="atualizarProductos()">
+                  <option value="">Todos</option>
+                  <option value="ok">Stock OK</option>
+                  <option value="bajo">Stock bajo</option>
+                  <option value="sin">Sin stock</option>
+                  <option value="nulo">Sin control</option>
+                  <option value="inactivo">Inactivos</option>
+                </select>
+              </div>
             </div>
 
-            <div class="field" style="margin-bottom: 12px; max-width: 320px">
-              <label>Buscar produto</label>
-              <input
-                type="text"
-                id="buscaProduto"
-                placeholder="Buscar…"
-                oninput="atualizarProdutos()"
-              />
-            </div>
-
-            <div id="listaProdutos" class="list"></div>
+            <div id="listaProductos" class="list"></div>
           </section>
 
           <!-- VENDEDORES -->
@@ -233,33 +279,26 @@
             <div class="section-head">
               <div>
                 <h2>Vendedores</h2>
-                <div class="desc">Equipe e desempenho</div>
+                <div class="desc">Equipo, metas, comisiones y desempeño</div>
               </div>
+              <button class="btn btn-primary" onclick="abrirModalVendedor()">+ Nuevo vendedor</button>
             </div>
 
-            <div class="toolbar">
-              <div class="field" style="flex: 1.4">
-                <label>Nome do vendedor</label>
-                <input
-                  type="text"
-                  id="nomeVendedor"
-                  placeholder="Ex: Ana Souza"
-                />
-              </div>
-              <button class="btn btn-primary" onclick="addVendedor()">
-                Adicionar
-              </button>
-            </div>
+            <div class="perf-panel" id="perfPanel"></div>
 
             <div id="listaVendedores" class="list"></div>
           </section>
+
         </main>
       </div>
     </div>
 
+    <!-- __HTML_MODALS__ -->
+
     <div class="toast" id="toast"></div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
-    <script src="./js/index.js"></script>
+    <datalist id="listaCategorias"></datalist>
+
+    <!-- __HTML_SCRIPTS__ -->
   </body>
 </html>
