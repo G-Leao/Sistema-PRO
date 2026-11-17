@@ -1,265 +1,497 @@
 <!doctype html>
-<html lang="pt-br">
+<html lang="pt-BR" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover"
-    />
-    <title>Pro · Controle de Vendas</title>
-
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Pro Vendas · Gestão Comercial</title>
+    <!-- Aplica o tema salvo antes da primeira pintura (evita "flash").
+         Única leitura direta de localStorage fora da camada Store. -->
+    <script>
+      (function () {
+        var t = "dark";
+        try {
+          var s = localStorage.getItem("pro_tema");
+          if (s === "light" || s === "dark") t = s;
+          else if (window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches) t = "light";
+        } catch (e) {}
+        document.documentElement.setAttribute("data-theme", t);
+      })();
+    </script>
     <link rel="stylesheet" href="./css/index.css" />
   </head>
   <body>
-    <div class="app">
-      <div class="backdrop" id="backdrop" onclick="fecharMenu()"></div>
+    <!-- Ícones (sprite inline, sem dependências externas) -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+      <defs>
+        <symbol id="i-dashboard" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></symbol>
+        <symbol id="i-vendas" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></symbol>
+        <symbol id="i-historico" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></symbol>
+        <symbol id="i-produtos" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5M12 13v8"/></symbol>
+        <symbol id="i-vendedores" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><circle cx="17.5" cy="9" r="2.5"/><path d="M17 14.2c2.6.2 4.5 2 4.5 5.3"/></symbol>
+        <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+        <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
+        <symbol id="i-menu" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></symbol>
+        <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+        <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></symbol>
+        <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></symbol>
+        <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+        <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></symbol>
+        <symbol id="i-undo" viewBox="0 0 24 24"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-6.7"/></symbol>
+        <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v5M14 11v5"/></symbol>
+        <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></symbol>
+        <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3l10 18H2L12 3z"/><path d="M12 10v5M12 18v.01"/></symbol>
+        <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></symbol>
+        <symbol id="i-up" viewBox="0 0 24 24"><path d="M7 17L17 7M8 7h9v9"/></symbol>
+        <symbol id="i-down" viewBox="0 0 24 24"><path d="M7 7l10 10M17 8v9H8"/></symbol>
+        <symbol id="i-money" viewBox="0 0 24 24"><path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></symbol>
+        <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2V3z"/><path d="M9 8h6M9 12h6"/></symbol>
+        <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3 12V3h9l9 9-9 9-9-9z"/><circle cx="7.5" cy="7.5" r="1"/></symbol>
+        <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></symbol>
+        <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></symbol>
+        <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3"/></symbol>
+        <symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/></symbol>
+      </defs>
+    </svg>
 
-      <aside class="sidebar" id="sidebar">
+    <a class="skip-link" href="#conteudo">Ir para o conteúdo</a>
+
+    <div class="boot-loader" id="loader" role="status">
+      <div class="spin"></div>
+      <span>Carregando…</span>
+    </div>
+
+    <div class="app">
+      <div class="backdrop" id="backdrop" data-acao="fecharMenu"></div>
+
+      <aside class="sidebar" id="sidebar" aria-label="Navegação principal">
         <div class="brand">
-          <div class="brand-mark">P</div>
-          <div class="brand-name">Pro Vendas</div>
+          <div class="brand-mark" aria-hidden="true">P</div>
+          <div>
+            <div class="brand-name">Pro Vendas</div>
+            <div class="brand-sub">Gestão comercial</div>
+          </div>
         </div>
-        <button
-          class="nav-item ativo"
-          data-tela="dashboard"
-          onclick="trocarTela('dashboard')"
-        >
-          <span class="nav-icon">◧</span>Dashboard
-        </button>
-        <button
-          class="nav-item"
-          data-tela="vendas"
-          onclick="trocarTela('vendas')"
-        >
-          <span class="nav-icon">↗</span>Vendas
-        </button>
-        <button
-          class="nav-item"
-          data-tela="produtos"
-          onclick="trocarTela('produtos')"
-        >
-          <span class="nav-icon">▤</span>Produtos
-        </button>
-        <button
-          class="nav-item"
-          data-tela="vendedores"
-          onclick="trocarTela('vendedores')"
-        >
-          <span class="nav-icon">◔</span>Vendedores
-        </button>
-        <div class="sidebar-footer">Dados salvos neste dispositivo</div>
+        <nav class="nav" aria-label="Seções">
+          <button class="nav-item ativo" data-tela="dashboard" data-acao="trocarTela" data-arg="dashboard" aria-current="page">
+            <svg class="ico" aria-hidden="true"><use href="#i-dashboard" /></svg><span>Dashboard</span>
+          </button>
+          <button class="nav-item" data-tela="vendas" data-acao="trocarTela" data-arg="vendas">
+            <svg class="ico" aria-hidden="true"><use href="#i-vendas" /></svg><span>Vendas</span>
+          </button>
+          <button class="nav-item" data-tela="historico" data-acao="trocarTela" data-arg="historico">
+            <svg class="ico" aria-hidden="true"><use href="#i-historico" /></svg><span>Histórico</span>
+          </button>
+          <button class="nav-item" data-tela="produtos" data-acao="trocarTela" data-arg="produtos">
+            <svg class="ico" aria-hidden="true"><use href="#i-produtos" /></svg><span>Produtos</span>
+          </button>
+          <button class="nav-item" data-tela="vendedores" data-acao="trocarTela" data-arg="vendedores">
+            <svg class="ico" aria-hidden="true"><use href="#i-vendedores" /></svg><span>Vendedores</span>
+          </button>
+        </nav>
+        <div class="sidebar-footer">
+          <div class="storage-note" id="storageNote">Dados salvos neste dispositivo</div>
+        </div>
       </aside>
 
       <div class="content">
-        <div class="topbar">
-          <button
-            class="menu-btn"
-            onclick="abrirMenu()"
-            aria-label="Abrir menu"
-          >
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <path
-                d="M3 5h14M3 10h14M3 15h14"
-                stroke="currentColor"
-                stroke-width="1.6"
-                stroke-linecap="round"
-              />
-            </svg>
+        <header class="topbar">
+          <button class="icon-btn menu-btn" data-acao="abrirMenu" aria-label="Abrir menu" aria-controls="sidebar">
+            <svg class="ico" aria-hidden="true"><use href="#i-menu" /></svg>
           </button>
-          <h1 id="tituloTela">Dashboard</h1>
-          <span class="sub" id="subTitulo">Visão geral do dia</span>
-        </div>
+          <div class="topbar-title">
+            <h1 id="tituloTela">Dashboard</h1>
+            <span class="sub" id="subTitulo">Visão geral do negócio</span>
+          </div>
+          <div class="topbar-actions">
+            <button class="btn btn-primary btn-sm hide-sm" data-acao="trocarTela" data-arg="vendas">
+              <svg class="ico" aria-hidden="true"><use href="#i-plus" /></svg>Nova venda
+            </button>
+            <button class="icon-btn" id="btnTema" data-acao="alternarTema" aria-label="Ativar tema claro" title="Alternar tema">
+              <svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun" /></svg>
+              <svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon" /></svg>
+            </button>
+          </div>
+        </header>
 
-        <main>
+        <main id="conteudo" tabindex="-1">
+
           <!-- DASHBOARD -->
-          <section id="dashboard" class="tela ativa">
-            <div class="grid-cards">
-              <div class="stat-card">
-                <div class="label">Total vendido</div>
-                <div class="value" id="total">R$ 0,00</div>
-              </div>
-              <div class="stat-card">
-                <div class="label">Vendas</div>
-                <div class="value" id="qtd">0</div>
-              </div>
-              <div class="stat-card">
-                <div class="label">Mais vendido</div>
-                <div class="value small" id="maisVendido">—</div>
-              </div>
-              <div class="stat-card">
-                <div class="label">Vendedor do dia</div>
-                <div class="value small" id="vendedorDia">—</div>
-              </div>
-            </div>
+          <section id="dashboard" class="tela ativa" aria-labelledby="tituloTela">
+            <div class="grid-cards" id="gridCards"></div>
 
-            <div class="meta-panel">
-              <div class="meta-top">
-                <div>
-                  <div class="label">Meta de hoje</div>
-                  <div class="meta-numbers">
-                    <span id="metaAtual">R$ 0,00</span>
-                    <span>/ R$ <span id="metaAlvo">0,00</span></span>
+            <div class="card meta-panel">
+              <div class="card-head">
+                <h2>Metas de faturamento</h2>
+              </div>
+              <div class="meta-cols">
+                <div class="meta-block">
+                  <div class="meta-top">
+                    <div>
+                      <div class="label">Meta diária</div>
+                      <div class="meta-numbers"><span id="metaDiaAtual">R$ 0,00</span> <span class="muted">/ <span id="metaDiaAlvo">R$ 0,00</span></span></div>
+                    </div>
+                    <div class="meta-right">
+                      <div class="meta-pct" id="metaDiaPct">0%</div>
+                      <div class="badge badge-soft" id="metaDiaStatus">Sem meta definida</div>
+                    </div>
                   </div>
+                  <div class="barra" role="progressbar" aria-label="Atingimento da meta diária" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progDia"><div id="barraMetaDia"></div></div>
+                  <div class="hint" id="metaDiaFaltam"></div>
                 </div>
-                <div style="text-align: right">
-                  <div class="meta-pct" id="metaPct">0%</div>
-                  <div class="meta-status" id="metaStatus">
-                    Sem meta definida
+                <div class="meta-block">
+                  <div class="meta-top">
+                    <div>
+                      <div class="label">Meta mensal</div>
+                      <div class="meta-numbers"><span id="metaMesAtual">R$ 0,00</span> <span class="muted">/ <span id="metaMesAlvo">R$ 0,00</span></span></div>
+                    </div>
+                    <div class="meta-right">
+                      <div class="meta-pct" id="metaMesPct">0%</div>
+                      <div class="badge badge-soft" id="metaMesStatus">Sem meta definida</div>
+                    </div>
                   </div>
+                  <div class="barra" role="progressbar" aria-label="Atingimento da meta mensal" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progMes"><div id="barraMetaMes"></div></div>
+                  <div class="hint" id="metaMesFaltam"></div>
                 </div>
               </div>
-              <div class="barra-container"><div id="barraProgresso"></div></div>
-              <div class="hint" id="metaFaltam" style="margin-top: 6px"></div>
-              <div class="meta-edit">
-                <input
-                  type="number"
-                  id="metaInput"
-                  placeholder="Definir meta do dia (R$)"
-                  min="0"
-                  step="0.01"
-                />
-                <button class="btn btn-primary" onclick="definirMeta()">
-                  Salvar meta
-                </button>
-              </div>
+              <form class="meta-edit" data-submit="guardarMetas" novalidate>
+                <div class="field">
+                  <label for="metaDiaInput">Meta diária (R$)</label>
+                  <input type="text" inputmode="decimal" id="metaDiaInput" placeholder="0,00" autocomplete="off" />
+                </div>
+                <div class="field">
+                  <label for="metaMesInput">Meta mensal (R$)</label>
+                  <input type="text" inputmode="decimal" id="metaMesInput" placeholder="0,00" autocomplete="off" />
+                </div>
+                <button type="submit" class="btn btn-primary">Salvar metas</button>
+                <button type="button" class="btn" data-acao="removerMetas">Remover metas</button>
+              </form>
             </div>
 
             <div class="dashboard-charts">
-              <div class="chart-card">
-                <h3>Produtos mais vendidos</h3>
-                <div class="chart-wrap">
-                  <canvas id="graficoProdutos"></canvas>
-                </div>
+              <div class="card span-8">
+                <div class="card-head"><h2>Faturamento por dia</h2><span class="muted small">Últimos 14 dias</span></div>
+                <div class="chart-wrap" id="graficoFaturamentoDia"></div>
               </div>
-              <div class="chart-card">
-                <h3>Vendas por vendedor</h3>
-                <div class="chart-wrap">
-                  <canvas id="graficoVendedores"></canvas>
-                </div>
+              <div class="card span-4">
+                <div class="card-head"><h2>Ranking de vendedores</h2><span class="muted small">Por faturamento</span></div>
+                <div id="rankingVendedoresDash"></div>
+              </div>
+              <div class="card span-8">
+                <div class="card-head"><h2>Faturamento mensal</h2><span class="muted small">Últimos 12 meses</span></div>
+                <div class="chart-wrap" id="graficoPeriodo"></div>
+              </div>
+              <div class="card span-4">
+                <div class="card-head"><h2>Formas de pagamento</h2><span class="muted small">Por nº de vendas</span></div>
+                <div id="graficoPagos"></div>
+              </div>
+              <div class="card span-12">
+                <div class="card-head"><h2>Produtos mais vendidos</h2><span class="muted small">Por unidades vendidas</span></div>
+                <div id="graficoProdutos"></div>
               </div>
             </div>
           </section>
 
           <!-- VENDAS -->
-          <section id="vendas" class="tela">
+          <section id="vendas" class="tela" aria-labelledby="tituloTela">
             <div class="section-head">
               <div>
-                <h2>Vendas</h2>
-                <div class="desc">Registre e acompanhe as vendas do dia</div>
+                <h2>Registrar venda</h2>
+                <div class="desc">Quantidade × Valor unitário − Desconto = Valor final</div>
               </div>
+              <button class="btn" data-acao="trocarTela" data-arg="historico">Ver histórico</button>
             </div>
 
-            <div class="toolbar">
-              <div class="field">
-                <label>Produto</label>
-                <select id="produto"></select>
+            <form class="venda-layout" data-submit="guardarNuevaVenta" novalidate>
+              <div class="card">
+                <div class="card-head"><h2>Dados da venda</h2></div>
+                <div class="grid-form" id="formVentaNueva"></div>
               </div>
-              <div class="field">
-                <label>Valor (R$)</label>
-                <input
-                  type="number"
-                  id="valor"
-                  min="0"
-                  step="0.01"
-                  placeholder="0,00"
-                />
+              <aside class="card resumo-card" aria-label="Resumo financeiro">
+                <div class="card-head"><h2>Resumo financeiro</h2></div>
+                <div id="resumoVentaNueva"></div>
+                <div class="btn-col">
+                  <button type="submit" class="btn btn-primary btn-lg">Registrar venda</button>
+                  <button type="button" class="btn" data-acao="limparFormularioVenda" data-arg="nueva">Limpar formulário</button>
+                </div>
+              </aside>
+            </form>
+
+            <h3 class="sub-secao">Últimas vendas</h3>
+            <div id="listaRecientes" class="list"></div>
+          </section>
+
+          <!-- HISTÓRICO -->
+          <section id="historico" class="tela" aria-labelledby="tituloTela">
+            <div class="section-head">
+              <div>
+                <h2>Histórico de vendas</h2>
+                <div class="desc">Pesquise, filtre e gerencie todas as vendas registradas</div>
               </div>
-              <div class="field">
-                <label>Vendedor</label>
-                <select id="vendedorSelect"></select>
-              </div>
-              <button class="btn btn-primary" onclick="addVenda()">
-                Cadastrar venda
+              <button class="btn btn-danger-ghost" data-acao="eliminarTodasVentas">
+                <svg class="ico" aria-hidden="true"><use href="#i-trash" /></svg>Excluir todas
               </button>
             </div>
 
-            <div class="toolbar" style="margin-bottom: 12px">
-              <div class="field search-field">
-                <label>Buscar</label>
-                <input
-                  type="text"
-                  id="buscaVenda"
-                  placeholder="Produto ou vendedor…"
-                  oninput="atualizarVendas()"
-                />
+            <div class="card filtros">
+              <div class="filtros-grid">
+                <div class="field search-field">
+                  <label for="hisBusca">Pesquisar</label>
+                  <input type="search" id="hisBusca" placeholder="Produto, vendedor ou observação…" data-input="filtrosHistorico" autocomplete="off" />
+                </div>
+                <div class="field"><label for="hisDesde">De</label><input type="date" id="hisDesde" data-change="filtrosHistorico" /></div>
+                <div class="field"><label for="hisHasta">Até</label><input type="date" id="hisHasta" data-change="filtrosHistorico" /></div>
+                <div class="field"><label for="hisVendedor">Vendedor</label><select id="hisVendedor" data-change="filtrosHistorico"></select></div>
+                <div class="field"><label for="hisProducto">Produto</label><select id="hisProducto" data-change="filtrosHistorico"></select></div>
+                <div class="field"><label for="hisPago">Pagamento</label><select id="hisPago" data-change="filtrosHistorico"></select></div>
+                <div class="field">
+                  <label for="hisEstado">Situação</label>
+                  <select id="hisEstado" data-change="filtrosHistorico">
+                    <option value="">Todas</option>
+                    <option value="valida">Válidas</option>
+                    <option value="anulada">Anuladas</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="hisOrden">Ordenar por</label>
+                  <select id="hisOrden" data-change="filtrosHistorico">
+                    <option value="reciente">Mais recentes</option>
+                    <option value="antiguo">Mais antigas</option>
+                    <option value="valorMayor">Maior valor</option>
+                    <option value="valorMenor">Menor valor</option>
+                    <option value="produtoAsc">Produto A–Z</option>
+                  </select>
+                </div>
               </div>
-              <button class="btn btn-danger-ghost" onclick="limparVendas()">
-                Limpar tudo
-              </button>
+              <div class="filtros-rodape">
+                <div class="his-info" id="hisInfo" aria-live="polite">—</div>
+                <button class="btn btn-sm" data-acao="limparFiltrosHistorico">Limpar filtros</button>
+              </div>
             </div>
 
-            <div id="listaVendas" class="list"></div>
+            <div class="card card-flush">
+              <div class="tabela-scroll">
+                <table class="tabela tabela-stack">
+                  <thead>
+                    <tr>
+                      <th scope="col">Data</th>
+                      <th scope="col">Produto</th>
+                      <th scope="col" class="num">Qtd.</th>
+                      <th scope="col">Vendedor</th>
+                      <th scope="col">Pagamento</th>
+                      <th scope="col" class="num">Valor</th>
+                      <th scope="col">Situação</th>
+                      <th scope="col" class="acoes">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody id="cuerpoHistorico"></tbody>
+                </table>
+              </div>
+              <div class="paginacao">
+                <button class="btn btn-sm" id="hisPrev" data-acao="paginaHistorico" data-arg="-1">← Anterior</button>
+                <span class="paginacao-info" id="hisPaginaInfo"></span>
+                <button class="btn btn-sm" id="hisNext" data-acao="paginaHistorico" data-arg="1">Próxima →</button>
+              </div>
+            </div>
           </section>
 
           <!-- PRODUTOS -->
-          <section id="produtos" class="tela">
+          <section id="produtos" class="tela" aria-labelledby="tituloTela">
             <div class="section-head">
               <div>
                 <h2>Produtos</h2>
-                <div class="desc">Catálogo usado nas vendas</div>
+                <div class="desc">Catálogo com preços, margem e controle de estoque</div>
               </div>
-            </div>
-
-            <div class="toolbar">
-              <div class="field" style="flex: 1.4">
-                <label>Nome do produto</label>
-                <input
-                  type="text"
-                  id="nomeProduto"
-                  placeholder="Ex: Relógio Seiko 5"
-                />
-                <div class="erro-msg" id="erroProduto"></div>
-              </div>
-              <button class="btn btn-primary" onclick="addProduto()">
-                Adicionar
+              <button class="btn btn-primary" data-acao="abrirModalProduto">
+                <svg class="ico" aria-hidden="true"><use href="#i-plus" /></svg>Novo produto
               </button>
             </div>
 
-            <div class="field" style="margin-bottom: 12px; max-width: 320px">
-              <label>Buscar produto</label>
-              <input
-                type="text"
-                id="buscaProduto"
-                placeholder="Buscar…"
-                oninput="atualizarProdutos()"
-              />
+            <div class="grid-mini" id="resumoProdutos"></div>
+            <div class="aviso" id="avisoStockBajo" role="status"></div>
+
+            <div class="card filtros">
+              <div class="filtros-grid filtros-grid-3">
+                <div class="field search-field">
+                  <label for="buscaProducto">Pesquisar</label>
+                  <input type="search" id="buscaProducto" placeholder="Nome, SKU ou marca…" data-input="atualizarProductos" autocomplete="off" />
+                </div>
+                <div class="field"><label for="filtroCategoria">Categoria</label><select id="filtroCategoria" data-change="atualizarProductos"></select></div>
+                <div class="field">
+                  <label for="filtroStock">Situação</label>
+                  <select id="filtroStock" data-change="atualizarProductos">
+                    <option value="">Todos (ativos)</option>
+                    <option value="ok">Estoque OK</option>
+                    <option value="bajo">Estoque baixo</option>
+                    <option value="sin">Sem estoque</option>
+                    <option value="nulo">Sem controle</option>
+                    <option value="inactivo">Inativos</option>
+                  </select>
+                </div>
+              </div>
             </div>
 
-            <div id="listaProdutos" class="list"></div>
+            <div class="card card-flush">
+              <div class="tabela-scroll">
+                <table class="tabela tabela-stack">
+                  <thead>
+                    <tr>
+                      <th scope="col">Produto</th>
+                      <th scope="col">Categoria / Marca</th>
+                      <th scope="col" class="num">Custo</th>
+                      <th scope="col" class="num">Venda</th>
+                      <th scope="col" class="num">Margem</th>
+                      <th scope="col" class="num">Estoque</th>
+                      <th scope="col">Situação</th>
+                      <th scope="col" class="acoes">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody id="listaProductos"></tbody>
+                </table>
+              </div>
+            </div>
           </section>
 
           <!-- VENDEDORES -->
-          <section id="vendedores" class="tela">
+          <section id="vendedores" class="tela" aria-labelledby="tituloTela">
             <div class="section-head">
               <div>
                 <h2>Vendedores</h2>
-                <div class="desc">Equipe e desempenho</div>
+                <div class="desc">Equipe, metas, comissões e desempenho</div>
               </div>
-            </div>
-
-            <div class="toolbar">
-              <div class="field" style="flex: 1.4">
-                <label>Nome do vendedor</label>
-                <input
-                  type="text"
-                  id="nomeVendedor"
-                  placeholder="Ex: Ana Souza"
-                />
-              </div>
-              <button class="btn btn-primary" onclick="addVendedor()">
-                Adicionar
+              <button class="btn btn-primary" data-acao="abrirModalVendedor">
+                <svg class="ico" aria-hidden="true"><use href="#i-plus" /></svg>Novo vendedor
               </button>
             </div>
 
-            <div id="listaVendedores" class="list"></div>
+            <div class="podio" id="perfPanel"></div>
+            <div id="listaVendedores" class="grid-vendedores"></div>
           </section>
+
         </main>
       </div>
     </div>
 
-    <div class="toast" id="toast"></div>
+    <!-- ===================== MODAIS ===================== -->
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
-    <script src="./js/index.js"></script>
+    <div class="modal-overlay" id="modalProducto" aria-hidden="true">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalProductoTitulo">
+        <form data-submit="guardarProducto" novalidate>
+          <div class="modal-head">
+            <h2 id="modalProductoTitulo">Novo produto</h2>
+            <button type="button" class="icon-btn" data-acao="fecharModal" data-arg="modalProducto" aria-label="Fechar"><svg class="ico" aria-hidden="true"><use href="#i-x" /></svg></button>
+          </div>
+          <div class="modal-body">
+            <div class="grid-form">
+              <div class="field campo-largo"><label for="prodNombre">Nome *</label><input type="text" id="prodNombre" maxlength="120" autocomplete="off" /></div>
+              <div class="field"><label for="prodSku">SKU</label><input type="text" id="prodSku" maxlength="60" autocomplete="off" /></div>
+              <div class="field"><label for="prodMarca">Marca</label><input type="text" id="prodMarca" maxlength="60" autocomplete="off" /></div>
+              <div class="field campo-largo"><label for="prodCategoria">Categoria</label><input type="text" id="prodCategoria" maxlength="60" list="listaCategorias" autocomplete="off" /></div>
+              <div class="field"><label for="prodPrecioCosto">Preço de custo (R$)</label><input type="text" inputmode="decimal" id="prodPrecioCosto" placeholder="0,00" autocomplete="off" /></div>
+              <div class="field"><label for="prodPrecioVenta">Preço de venda (R$) *</label><input type="text" inputmode="decimal" id="prodPrecioVenta" placeholder="0,00" autocomplete="off" /></div>
+              <div class="field"><label for="prodStock">Quantidade em estoque</label><input type="text" inputmode="numeric" id="prodStock" placeholder="Vazio = sem controle" autocomplete="off" /></div>
+              <div class="field"><label for="prodStockMin">Estoque mínimo</label><input type="text" inputmode="numeric" id="prodStockMin" placeholder="0" autocomplete="off" /></div>
+              <div class="field campo-largo"><label for="prodImagen">Imagem (link, opcional)</label><input type="url" id="prodImagen" maxlength="500" placeholder="https://…" autocomplete="off" /></div>
+              <label class="check campo-largo"><input type="checkbox" id="prodActivo" checked /> Produto ativo (disponível para venda)</label>
+            </div>
+            <div class="form-erro" id="erroProducto" role="alert"></div>
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn" data-acao="fecharModal" data-arg="modalProducto">Cancelar</button>
+            <button type="submit" class="btn btn-primary">Salvar produto</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="modalVendedor" aria-hidden="true">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalVendedorTitulo">
+        <form data-submit="guardarVendedor" novalidate>
+          <div class="modal-head">
+            <h2 id="modalVendedorTitulo">Novo vendedor</h2>
+            <button type="button" class="icon-btn" data-acao="fecharModal" data-arg="modalVendedor" aria-label="Fechar"><svg class="ico" aria-hidden="true"><use href="#i-x" /></svg></button>
+          </div>
+          <div class="modal-body">
+            <div class="grid-form">
+              <div class="field campo-largo"><label for="vendNombre">Nome *</label><input type="text" id="vendNombre" maxlength="120" autocomplete="off" /></div>
+              <div class="field"><label for="vendCargo">Cargo</label><input type="text" id="vendCargo" maxlength="60" autocomplete="off" /></div>
+              <div class="field"><label for="vendComision">Comissão (%)</label><input type="text" inputmode="decimal" id="vendComision" placeholder="0" autocomplete="off" /></div>
+              <div class="field campo-largo"><label for="vendMeta">Meta mensal (R$)</label><input type="text" inputmode="decimal" id="vendMeta" placeholder="0,00" autocomplete="off" /></div>
+              <div class="field campo-largo"><label for="vendFoto">Foto (link, opcional)</label><input type="url" id="vendFoto" maxlength="500" placeholder="https://…" autocomplete="off" /></div>
+            </div>
+            <div class="form-erro" id="erroVendedor" role="alert"></div>
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn" data-acao="fecharModal" data-arg="modalVendedor">Cancelar</button>
+            <button type="submit" class="btn btn-primary">Salvar vendedor</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="modalVenta" aria-hidden="true">
+      <div class="modal modal-lg" role="dialog" aria-modal="true" aria-labelledby="modalVentaTitulo">
+        <form data-submit="guardarEdicionVenta" novalidate>
+          <div class="modal-head">
+            <h2 id="modalVentaTitulo">Editar venda</h2>
+            <button type="button" class="icon-btn" data-acao="fecharModal" data-arg="modalVenta" aria-label="Fechar"><svg class="ico" aria-hidden="true"><use href="#i-x" /></svg></button>
+          </div>
+          <div class="modal-body">
+            <div class="grid-form" id="camposVentaModal"></div>
+            <div id="resumoVentaEdit" class="resumo-inline"></div>
+            <div class="form-erro" id="erroVenta" role="alert"></div>
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn" data-acao="fecharModal" data-arg="modalVenta">Cancelar</button>
+            <button type="submit" class="btn btn-primary">Salvar alterações</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="modalDetalleVenta" aria-hidden="true">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="detalheTitulo">
+        <div class="modal-head">
+          <h2 id="detalheTitulo">Detalhes da venda</h2>
+          <button type="button" class="icon-btn" data-acao="fecharModal" data-arg="modalDetalleVenta" aria-label="Fechar"><svg class="ico" aria-hidden="true"><use href="#i-x" /></svg></button>
+        </div>
+        <div class="modal-body" id="detalleContenido"></div>
+        <div class="modal-foot">
+          <button type="button" class="btn" data-acao="fecharModal" data-arg="modalDetalleVenta">Fechar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="modalConfirmar" aria-hidden="true">
+      <div class="modal modal-sm" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitulo" aria-describedby="confirmMensaje">
+        <div class="modal-head"><h2 id="confirmTitulo">Confirmar</h2></div>
+        <div class="modal-body"><p id="confirmMensaje" class="confirm-msg"></p></div>
+        <div class="modal-foot">
+          <button type="button" class="btn" data-acao="fecharModal" data-arg="modalConfirmar">Cancelar</button>
+          <button type="button" class="btn btn-danger" id="confirmBoton" data-acao="executarConfirmacao">Confirmar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <div class="tooltip" id="tooltip" role="tooltip"></div>
+    <datalist id="listaCategorias"></datalist>
+
+    <!-- Ordem importa: core → serviços → UI → app.
+         (js/index.js é uma implementação antiga e NÃO é carregado.) -->
+    <script src="./js/core/utils.js"></script>
+    <script src="./js/core/store.js"></script>
+    <script src="./js/core/state.js"></script>
+    <script src="./js/services/metricas.service.js"></script>
+    <script src="./js/services/productos.service.js"></script>
+    <script src="./js/services/vendedores.service.js"></script>
+    <script src="./js/services/ventas.service.js"></script>
+    <script src="./js/ui/ui.js"></script>
+    <script src="./js/ui/dashboard.js"></script>
+    <script src="./js/ui/vendas.js"></script>
+    <script src="./js/ui/historico.js"></script>
+    <script src="./js/ui/productos.js"></script>
+    <script src="./js/ui/vendedores.js"></script>
+    <script src="./js/app.js"></script>
   </body>
 </html>
