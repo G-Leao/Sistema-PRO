@@ -1,10 +1,13 @@
 /* ============================================================
-   SERVICIO DE VENTAS — reglas de negocio (independiente de la UI)
-   En el futuro esta capa se traslada al backend (API REST).
+   SERVIÇO DE VENDAS — regras de negócio (independente da UI).
+   Todas as operações são assíncronas e devolvem o envelope
+   { ok, data } / { ok:false, error:{code,message} }.
+   No futuro esta camada vira o cliente da API; as regras abaixo
+   passam a ser reforçadas pelo backend.
    ============================================================ */
 
 const ServicioVentas = {
-  /* Cantidad × Valor unitario − Descuento = Valor final */
+  /* Quantidade × Valor unitário − Desconto = Valor final */
   calcular(datos) {
     const cantidad = Math.max(0, Utils.parsearNumero(datos && datos.cantidad) || 0);
     const valorUnitario = Math.max(0, Utils.parsearNumero(datos && datos.valorUnitario) || 0);
@@ -19,30 +22,42 @@ const ServicioVentas = {
     };
   },
 
-  validar(datos) {
-    if (!datos) return "Datos inválidos.";
+  /* opcoes.permitirInativoId: produto inativo já vinculado à venda editada */
+  validar(datos, opcoes) {
+    if (!datos) return "Dados inválidos.";
     const producto = State.productos.find((p) => p.id === datos.productoId);
-    if (!producto) return "Selecciona un producto válido.";
-    if (producto.activo === false) return "El producto seleccionado está inactivo.";
+    if (!producto) return "Selecione um produto válido.";
+    if (producto.activo === false && !(opcoes && opcoes.permitirInativoId === producto.id)) {
+      return "O produto selecionado está inativo.";
+    }
     const vendedor = State.vendedores.find((v) => v.id === datos.vendedorId);
-    if (!vendedor) return "Selecciona un vendedor válido.";
+    if (!vendedor) return "Selecione um vendedor válido.";
     const cantidad = Utils.parsearNumero(datos.cantidad);
-    if (!(cantidad > 0)) return "La cantidad debe ser mayor que cero.";
+    if (!(cantidad > 0)) return "A quantidade deve ser maior que zero.";
+    if (cantidad > LIMITES.quantidadeMax) return "A quantidade informada é grande demais.";
     const valorUnitario = Utils.parsearNumero(datos.valorUnitario);
-    if (!(valorUnitario > 0)) return "El valor unitario debe ser mayor que cero.";
+    if (!(valorUnitario > 0)) return "O valor unitário deve ser maior que zero.";
+    if (valorUnitario > LIMITES.valorMax) return "O valor unitário informado é grande demais.";
     const descuento = Utils.parsearNumero(datos.descuento) || 0;
-    if (descuento < 0) return "El descuento no puede ser negativo.";
-    if (!FORMAS_PAGAMENTO.includes(datos.pagamento)) return "Forma de pago inválida.";
+    if (descuento < 0) return "O desconto não pode ser negativo.";
+    if (descuento > Utils.redondear(cantidad * valorUnitario)) {
+      return "O desconto não pode ser maior que o valor bruto da venda.";
+    }
+    if (!FORMAS_PAGAMENTO.includes(datos.pagamento)) return "Forma de pagamento inválida.";
+    if (datos.fecha && !Utils.normalizarFecha(datos.fecha)) return "Data e hora inválidas.";
+    if (String(datos.observacion || "").length > LIMITES.observacao) {
+      return `A observação pode ter no máximo ${LIMITES.observacao} caracteres.`;
+    }
     return null;
   },
 
-  /* delta positivo resta stock; delta negativo lo devuelve */
+  /* delta positivo baixa estoque; negativo devolve */
   _revisarStock(productoId, delta) {
     const p = State.productos.find((x) => x.id === productoId);
-    if (!p || p.stock === null) return null; // sin control de stock
+    if (!p || p.stock === null) return null; // sem controle de estoque
     if (p.stock - delta < 0) {
       const disp = Number.isInteger(p.stock) ? p.stock : Math.floor(p.stock);
-      return `Stock insuficiente para "${p.nombre}". Disponible: ${disp}`;
+      return `Estoque insuficiente para "${p.nombre}". Disponível: ${disp}`;
     }
     return null;
   },
@@ -53,124 +68,143 @@ const ServicioVentas = {
     p.stock = Utils.redondear(p.stock - delta);
   },
 
-  registrar(datos) {
+  async registrar(datos) {
     const error = this.validar(datos);
-    if (error) return { ok: false, error };
+    if (error) return Resultado.erro("validacao", error);
     const calc = this.calcular(datos);
-    const producto = State.productos.find((p) => p.id === datos.productoId);
-    const vendedor = State.vendedores.find((v) => v.id === datos.vendedorId);
-
-    const conflict = this._revisarStock(producto.id, calc.cantidad);
-    if (conflict) return { ok: false, error: conflict };
-
-    const venta = {
-      id: Utils.id(),
-      productoId: producto.id,
-      productoNombre: producto.nombre,
-      vendedorId: vendedor.id,
-      vendedorNombre: vendedor.nombre,
-      cantidad: calc.cantidad,
-      valorUnitario: calc.valorUnitario,
-      descuento: calc.descuento,
-      valorFinal: calc.valorFinal,
-      pagamento: datos.pagamento,
-      fecha: datos.fecha || Utils.ahora(),
-      observacion: (datos.observacion || "").trim(),
-      estado: "valida",
-    };
-    this._aplicarStock(producto.id, venta.cantidad);
-    State.ventas.push(venta);
-    State.guardarVentas();
-    State.guardarProductos();
-    return { ok: true, venta };
+    return State.executar(
+      ["ventas", "productos"],
+      () => {
+        const producto = State.productos.find((p) => p.id === datos.productoId);
+        const vendedor = State.vendedores.find((v) => v.id === datos.vendedorId);
+        const conflict = this._revisarStock(producto.id, calc.cantidad);
+        if (conflict) return Resultado.erro("estoque_insuficiente", conflict);
+        const venta = {
+          id: Utils.id(),
+          productoId: producto.id,
+          productoNombre: producto.nombre,
+          vendedorId: vendedor.id,
+          vendedorNombre: vendedor.nombre,
+          cantidad: calc.cantidad,
+          valorUnitario: calc.valorUnitario,
+          descuento: calc.descuento,
+          valorFinal: calc.valorFinal,
+          pagamento: datos.pagamento,
+          fecha: Utils.normalizarFecha(datos.fecha) || Utils.ahora(),
+          observacion: String(datos.observacion || "").trim(),
+          estado: "valida",
+        };
+        this._aplicarStock(producto.id, venta.cantidad);
+        State.ventas.push(venta);
+        return Resultado.ok({ venta });
+      },
+      { entidade: "venda", acao: "criar" },
+    );
   },
 
-  actualizar(id, datos) {
-    const idx = State.ventas.findIndex((v) => v.id === id);
-    if (idx < 0) return { ok: false, error: "Venta no encontrada." };
-    const error = this.validar(datos);
-    if (error) return { ok: false, error };
-    const vieja = State.ventas[idx];
+  async actualizar(id, datos) {
+    const vieja0 = State.ventas.find((v) => v.id === id);
+    if (!vieja0) return Resultado.erro("nao_encontrado", "Venda não encontrada.");
+    const error = this.validar(datos, { permitirInativoId: vieja0.productoId });
+    if (error) return Resultado.erro("validacao", error);
     const calc = this.calcular(datos);
-    const producto = State.productos.find((p) => p.id === datos.productoId);
-    const vendedor = State.vendedores.find((v) => v.id === datos.vendedorId);
+    return State.executar(
+      ["ventas", "productos"],
+      () => {
+        const idx = State.ventas.findIndex((v) => v.id === id);
+        const vieja = State.ventas[idx];
+        const producto = State.productos.find((p) => p.id === datos.productoId);
+        const vendedor = State.vendedores.find((v) => v.id === datos.vendedorId);
 
-    /* devuelve el stock del producto anterior si la venta era válida */
-    if (vieja.estado === "valida") {
-      this._aplicarStock(vieja.productoId, -vieja.cantidad);
-    }
-    const conflict = this._revisarStock(producto.id, calc.cantidad);
-    if (conflict) {
-      this._aplicarStock(vieja.productoId, vieja.cantidad);
-      return { ok: false, error: `No se pudo guardar: ${conflict}` };
-    }
-    this._aplicarStock(producto.id, calc.cantidad);
+        /* Estoque só é movimentado quando a venda está válida:
+           vendas anuladas já devolveram seu estoque. */
+        if (vieja.estado === "valida") {
+          this._aplicarStock(vieja.productoId, -vieja.cantidad);
+          const conflict = this._revisarStock(producto.id, calc.cantidad);
+          if (conflict) return Resultado.erro("estoque_insuficiente", `Não foi possível salvar: ${conflict}`);
+          this._aplicarStock(producto.id, calc.cantidad);
+        }
 
-    State.ventas[idx] = {
-      ...vieja,
-      productoId: producto.id,
-      productoNombre: producto.nombre,
-      vendedorId: vendedor.id,
-      vendedorNombre: vendedor.nombre,
-      cantidad: calc.cantidad,
-      valorUnitario: calc.valorUnitario,
-      descuento: calc.descuento,
-      valorFinal: calc.valorFinal,
-      pagamento: datos.pagamento,
-      fecha: datos.fecha || vieja.fecha,
-      observacion: (datos.observacion || "").trim(),
-    };
-    State.guardarVentas();
-    State.guardarProductos();
-    return { ok: true, venta: State.ventas[idx] };
+        State.ventas[idx] = {
+          ...vieja,
+          productoId: producto.id,
+          productoNombre: producto.nombre,
+          vendedorId: vendedor.id,
+          vendedorNombre: vendedor.nombre,
+          cantidad: calc.cantidad,
+          valorUnitario: calc.valorUnitario,
+          descuento: calc.descuento,
+          valorFinal: calc.valorFinal,
+          pagamento: datos.pagamento,
+          fecha: Utils.normalizarFecha(datos.fecha) || vieja.fecha,
+          observacion: String(datos.observacion || "").trim(),
+        };
+        return Resultado.ok({ venta: State.ventas[idx] });
+      },
+      { entidade: "venda", acao: "atualizar", id },
+    );
   },
 
-  eliminar(id) {
-    const idx = State.ventas.findIndex((v) => v.id === id);
-    if (idx < 0) return { ok: false, error: "Venta no encontrada." };
-    const venta = State.ventas[idx];
-    if (venta.estado === "valida") {
-      this._aplicarStock(venta.productoId, -venta.cantidad);
-    }
-    State.ventas.splice(idx, 1);
-    State.guardarVentas();
-    State.guardarProductos();
-    return { ok: true };
+  async eliminar(id) {
+    if (!State.ventas.some((v) => v.id === id)) return Resultado.erro("nao_encontrado", "Venda não encontrada.");
+    return State.executar(
+      ["ventas", "productos"],
+      () => {
+        const idx = State.ventas.findIndex((v) => v.id === id);
+        const venta = State.ventas[idx];
+        if (venta.estado === "valida") this._aplicarStock(venta.productoId, -venta.cantidad);
+        State.ventas.splice(idx, 1);
+        return Resultado.ok(null);
+      },
+      { entidade: "venda", acao: "excluir", id },
+    );
   },
 
-  anular(id) {
-    const idx = State.ventas.findIndex((v) => v.id === id);
-    if (idx < 0) return { ok: false, error: "Venta no encontrada." };
-    const venta = State.ventas[idx];
-    if (venta.estado !== "valida") return { ok: false, error: "La venta ya está anulada." };
-    this._aplicarStock(venta.productoId, -venta.cantidad);
-    venta.estado = "anulada";
-    State.guardarVentas();
-    State.guardarProductos();
-    return { ok: true, venta };
+  async anular(id) {
+    const v0 = State.ventas.find((v) => v.id === id);
+    if (!v0) return Resultado.erro("nao_encontrado", "Venda não encontrada.");
+    if (v0.estado !== "valida") return Resultado.erro("estado_invalido", "A venda já está anulada.");
+    return State.executar(
+      ["ventas", "productos"],
+      () => {
+        const venta = State.ventas.find((v) => v.id === id);
+        this._aplicarStock(venta.productoId, -venta.cantidad);
+        venta.estado = "anulada";
+        return Resultado.ok({ venta });
+      },
+      { entidade: "venda", acao: "anular", id },
+    );
   },
 
-  revalidar(id) {
-    const idx = State.ventas.findIndex((v) => v.id === id);
-    if (idx < 0) return { ok: false, error: "Venta no encontrada." };
-    const venta = State.ventas[idx];
-    if (venta.estado !== "anulada") return { ok: false, error: "La venta ya está válida." };
-    const conflict = this._revisarStock(venta.productoId, venta.cantidad);
-    if (conflict) return { ok: false, error: conflict };
-    this._aplicarStock(venta.productoId, venta.cantidad);
-    venta.estado = "valida";
-    State.guardarVentas();
-    State.guardarProductos();
-    return { ok: true, venta };
+  async revalidar(id) {
+    const v0 = State.ventas.find((v) => v.id === id);
+    if (!v0) return Resultado.erro("nao_encontrado", "Venda não encontrada.");
+    if (v0.estado !== "anulada") return Resultado.erro("estado_invalido", "A venda já está válida.");
+    return State.executar(
+      ["ventas", "productos"],
+      () => {
+        const venta = State.ventas.find((v) => v.id === id);
+        const conflict = this._revisarStock(venta.productoId, venta.cantidad);
+        if (conflict) return Resultado.erro("estoque_insuficiente", conflict);
+        this._aplicarStock(venta.productoId, venta.cantidad);
+        venta.estado = "valida";
+        return Resultado.ok({ venta });
+      },
+      { entidade: "venda", acao: "revalidar", id },
+    );
   },
 
-  eliminarTodas() {
-    State.ventas.forEach((v) => {
-      if (v.estado === "valida") this._aplicarStock(v.productoId, -v.cantidad);
-    });
-    State.ventas = [];
-    State.guardarVentas();
-    State.guardarProductos();
-    return { ok: true };
+  async eliminarTodas() {
+    return State.executar(
+      ["ventas", "productos"],
+      () => {
+        State.ventas.forEach((v) => {
+          if (v.estado === "valida") this._aplicarStock(v.productoId, -v.cantidad);
+        });
+        State.ventas = [];
+        return Resultado.ok(null);
+      },
+      { entidade: "venda", acao: "excluir_todas" },
+    );
   },
 };

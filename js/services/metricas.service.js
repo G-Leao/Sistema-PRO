@@ -1,52 +1,60 @@
 /* ============================================================
-   SERVICIO DE MÉTRICAS — cálculos del dashboard y desempeño.
-   Funciones puras sobre las ventas: no tocan la UI ni el storage.
+   SERVIÇO DE MÉTRICAS — cálculos do dashboard e desempenho.
+   Funções puras sobre as vendas: não tocam UI nem persistência.
+   Agrupamentos usam o ID do vendedor/produto (o nome só é usado
+   para vendas legadas ainda sem vínculo).
    ============================================================ */
 
 const ServicioMetricas = {
   validas(lista) {
-    return (lista !== undefined ? lista : State.ventas).filter(
-      (v) => v.estado === "valida",
-    );
+    return (lista !== undefined ? lista : State.ventas).filter((v) => v.estado === "valida");
+  },
+
+  _chaveVendedor(v) {
+    return v.vendedorId || "nome:" + String(v.vendedorNombre || "").trim().toLowerCase();
+  },
+  _chaveProduto(v) {
+    return v.productoId || "nome:" + String(v.productoNombre || "").trim().toLowerCase();
+  },
+
+  _soma(lista, filtro) {
+    let total = 0;
+    let n = 0;
+    lista.forEach((v) => {
+      if (filtro(v)) {
+        total = Utils.redondear(total + v.valorFinal);
+        n++;
+      }
+    });
+    return { total, n };
+  },
+
+  _delta(atual, anterior) {
+    return anterior > 0 ? Utils.redondear(((atual - anterior) / anterior) * 100) : null;
   },
 
   resumen(lista) {
     const validas = this.validas(lista);
     let totalVendido = 0;
     let totalUnidades = 0;
-    const unidadesPorProducto = {};
-    const totalPorVendedor = {};
+    const porProduto = {};
+    const porVendedor = {};
 
     validas.forEach((v) => {
       totalVendido = Utils.redondear(totalVendido + v.valorFinal);
       totalUnidades += v.cantidad;
-      unidadesPorProducto[v.productoNombre] =
-        (unidadesPorProducto[v.productoNombre] || 0) + v.cantidad;
-      totalPorVendedor[v.vendedorNombre] = Utils.redondear(
-        (totalPorVendedor[v.vendedorNombre] || 0) + v.valorFinal,
-      );
+      const kp = this._chaveProduto(v);
+      porProduto[kp] = porProduto[kp] || { nombre: v.productoNombre, unidades: 0 };
+      porProduto[kp].unidades += v.cantidad;
+      const kv = this._chaveVendedor(v);
+      porVendedor[kv] = porVendedor[kv] || { nombre: v.vendedorNombre, total: 0 };
+      porVendedor[kv].total = Utils.redondear(porVendedor[kv].total + v.valorFinal);
     });
 
     const numVentas = validas.length;
     const ticketMedio = numVentas > 0 ? Utils.redondear(totalVendido / numVentas) : 0;
-
-    let masVendido = null;
-    let maxUnidades = 0;
-    Object.entries(unidadesPorProducto).forEach(([nombre, unidades]) => {
-      if (unidades > maxUnidades) {
-        maxUnidades = unidades;
-        masVendido = nombre;
-      }
-    });
-
-    let mejorVendedor = null;
-    let maxTotal = 0;
-    Object.entries(totalPorVendedor).forEach(([nombre, total]) => {
-      if (total > maxTotal) {
-        maxTotal = total;
-        mejorVendedor = nombre;
-      }
-    });
+    const masVendido = Object.values(porProduto).sort((a, b) => b.unidades - a.unidades)[0] || null;
+    const mejor = Object.values(porVendedor).sort((a, b) => b.total - a.total)[0] || null;
 
     return {
       totalVendido,
@@ -54,68 +62,70 @@ const ServicioMetricas = {
       ticketMedio,
       totalUnidades,
       numVendedores: State.vendedores.length,
-      masVendido: masVendido ? { nombre: masVendido, unidades: maxUnidades } : null,
-      mejorVendedor: mejorVendedor ? { nombre: mejorVendedor, total: maxTotal } : null,
+      masVendido: masVendido && masVendido.unidades > 0 ? masVendido : null,
+      mejorVendedor: mejor && mejor.total > 0 ? mejor : null,
     };
   },
 
-  metaDia(lista, meta) {
+  /* Faturamento do dia, com comparação com o dia anterior */
+  dia(lista) {
     const validas = this.validas(lista);
-    const hoy = Utils.hoyDia();
-    let totalHoy = 0;
-    let numHoy = 0;
-    validas.forEach((v) => {
-      if (Utils.claveDia(v.fecha) === hoy) {
-        totalHoy = Utils.redondear(totalHoy + v.valorFinal);
-        numHoy++;
-      }
-    });
-    const pct = meta > 0 ? Math.min(100, (totalHoy / meta) * 100) : 0;
-    return { totalHoy, numHoy, meta, pct: Utils.redondear(pct) };
+    const hoje = Utils.hoyDia();
+    const ontem = Utils.diaRelativo(-1);
+    const h = this._soma(validas, (v) => Utils.claveDia(v.fecha) === hoje);
+    const o = this._soma(validas, (v) => Utils.claveDia(v.fecha) === ontem);
+    return { total: h.total, num: h.n, anterior: o.total, delta: this._delta(h.total, o.total) };
+  },
+
+  metaDia(lista, meta) {
+    const d = this.dia(lista);
+    const pctReal = meta > 0 ? (d.total / meta) * 100 : 0;
+    return {
+      totalHoy: d.total,
+      numHoy: d.num,
+      meta,
+      pct: Utils.redondear(Math.min(100, pctReal)),
+      pctReal: Utils.redondear(pctReal),
+      restante: Utils.redondear(Math.max(0, meta - d.total)),
+    };
   },
 
   metaMes(lista, meta) {
     const validas = this.validas(lista);
     const mes = Utils.mesActual(Utils.ahora());
-    let totalMes = 0;
-    validas.forEach((v) => {
-      if (Utils.claveMes(v.fecha) === mes) {
-        totalMes = Utils.redondear(totalMes + v.valorFinal);
-      }
-    });
-    const pct = meta > 0 ? Math.min(100, (totalMes / meta) * 100) : 0;
-    return { totalMes, meta, pct: Utils.redondear(pct) };
+    const m = this._soma(validas, (v) => Utils.claveMes(v.fecha) === mes);
+    const pctReal = meta > 0 ? (m.total / meta) * 100 : 0;
+    return {
+      totalMes: m.total,
+      meta,
+      pct: Utils.redondear(Math.min(100, pctReal)),
+      pctReal: Utils.redondear(pctReal),
+      restante: Utils.redondear(Math.max(0, meta - m.total)),
+    };
   },
 
   comparativaMes(lista) {
     const validas = this.validas(lista);
-    const ahora = new Date(Utils.ahora());
+    const ahora = new Date();
     const p = (n) => String(n).padStart(2, "0");
     const mesActual = `${ahora.getFullYear()}-${p(ahora.getMonth() + 1)}`;
     const fPrev = new Date(ahora.getFullYear(), ahora.getMonth() - 1, 1);
     const mesAnterior = `${fPrev.getFullYear()}-${p(fPrev.getMonth() + 1)}`;
-    let actual = 0;
-    let anterior = 0;
-    validas.forEach((v) => {
-      const m = Utils.claveMes(v.fecha);
-      if (m === mesActual) actual = Utils.redondear(actual + v.valorFinal);
-      else if (m === mesAnterior) anterior = Utils.redondear(anterior + v.valorFinal);
-    });
-    const delta = anterior > 0 ? Utils.redondear(((actual - anterior) / anterior) * 100) : null;
-    return { mesActual, mesAnterior, actual, anterior, delta };
+    const actual = this._soma(validas, (v) => Utils.claveMes(v.fecha) === mesActual).total;
+    const anterior = this._soma(validas, (v) => Utils.claveMes(v.fecha) === mesAnterior).total;
+    return { mesActual, mesAnterior, actual, anterior, delta: this._delta(actual, anterior) };
   },
 
   serieDiaria(lista, dias) {
     const validas = this.validas(lista);
-    const hoy = new Date(Utils.ahora());
+    const hoy = new Date();
     const p = (n) => String(n).padStart(2, "0");
     const labels = [];
     const valores = [];
     const claves = [];
     for (let i = dias - 1; i >= 0; i--) {
       const d = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - i);
-      const clave = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-      claves.push(clave);
+      claves.push(`${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`);
       labels.push(`${p(d.getDate())}/${p(d.getMonth() + 1)}`);
       valores.push(0);
     }
@@ -123,92 +133,113 @@ const ServicioMetricas = {
     claves.forEach((c, i) => (mapa[c] = i));
     validas.forEach((v) => {
       const idx = mapa[Utils.claveDia(v.fecha)];
-      if (idx !== undefined) {
-        valores[idx] = Utils.redondear(valores[idx] + v.valorFinal);
-      }
+      if (idx !== undefined) valores[idx] = Utils.redondear(valores[idx] + v.valorFinal);
     });
-    return { labels, valores };
+    return { labels, valores, claves };
   },
 
   serieMensual(lista, meses) {
     const validas = this.validas(lista);
-    const hoy = new Date(Utils.ahora());
+    const hoy = new Date();
     const p = (n) => String(n).padStart(2, "0");
-    const nombres = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+    const nombres = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
     const labels = [];
     const valores = [];
     const claves = [];
     for (let i = meses - 1; i >= 0; i--) {
       const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
-      const clave = `${d.getFullYear()}-${p(d.getMonth() + 1)}`;
-      claves.push(clave);
-      labels.push(`${nombres[d.getMonth()]} ${d.getFullYear()}`);
+      claves.push(`${d.getFullYear()}-${p(d.getMonth() + 1)}`);
+      labels.push(`${nombres[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`);
       valores.push(0);
     }
     const mapa = {};
     claves.forEach((c, i) => (mapa[c] = i));
     validas.forEach((v) => {
       const idx = mapa[Utils.claveMes(v.fecha)];
-      if (idx !== undefined) {
-        valores[idx] = Utils.redondear(valores[idx] + v.valorFinal);
-      }
+      if (idx !== undefined) valores[idx] = Utils.redondear(valores[idx] + v.valorFinal);
     });
-    return { labels, valores };
+    return { labels, valores, claves };
   },
 
   rankingProductos(lista, limite) {
-    const validas = this.validas(lista);
     const mapa = {};
-    validas.forEach((v) => {
-      mapa[v.productoNombre] = (mapa[v.productoNombre] || 0) + v.cantidad;
+    this.validas(lista).forEach((v) => {
+      const k = this._chaveProduto(v);
+      mapa[k] = mapa[k] || { nombre: v.productoNombre, unidades: 0, total: 0 };
+      mapa[k].unidades += v.cantidad;
+      mapa[k].total = Utils.redondear(mapa[k].total + v.valorFinal);
     });
-    return Object.entries(mapa)
-      .map(([nombre, unidades]) => ({ nombre, unidades }))
+    return Object.values(mapa)
       .sort((a, b) => b.unidades - a.unidades)
       .slice(0, limite || 6);
   },
 
   rankingVendedores(lista, limite) {
-    const validas = this.validas(lista);
     const mapa = {};
-    validas.forEach((v) => {
-      mapa[v.vendedorNombre] = Utils.redondear(
-        (mapa[v.vendedorNombre] || 0) + v.valorFinal,
-      );
+    this.validas(lista).forEach((v) => {
+      const k = this._chaveVendedor(v);
+      mapa[k] = mapa[k] || { id: v.vendedorId, nombre: v.vendedorNombre, total: 0, num: 0 };
+      mapa[k].total = Utils.redondear(mapa[k].total + v.valorFinal);
+      mapa[k].num++;
     });
-    return Object.entries(mapa)
-      .map(([nombre, total]) => ({ nombre, total }))
+    return Object.values(mapa)
       .sort((a, b) => b.total - a.total)
       .slice(0, limite || 6);
   },
 
   distribucionPagos(lista) {
-    const validas = this.validas(lista);
     const mapa = {};
-    FORMAS_PAGAMENTO.forEach((f) => (mapa[f] = 0));
-    validas.forEach((v) => {
-      mapa[v.pagamento] = (mapa[v.pagamento] || 0) + 1;
+    const totais = {};
+    FORMAS_PAGAMENTO.forEach((f) => {
+      mapa[f] = 0;
+      totais[f] = 0;
     });
-    return { labels: Object.keys(mapa), valores: Object.values(mapa) };
+    this.validas(lista).forEach((v) => {
+      mapa[v.pagamento] = (mapa[v.pagamento] || 0) + 1;
+      totais[v.pagamento] = Utils.redondear((totais[v.pagamento] || 0) + v.valorFinal);
+    });
+    const labels = Object.keys(mapa);
+    return { labels, valores: labels.map((l) => mapa[l]), totais: labels.map((l) => totais[l]) };
   },
 
-  resumenVendedor(vendedorNombre, lista) {
-    const validas = this.validas(lista);
-    const suyas = validas.filter((v) => v.vendedorNombre === vendedorNombre);
+  /* Resumo individual. Recebe o objeto vendedor (vínculo por ID; vendas
+     legadas sem ID são associadas pelo nome). */
+  resumenVendedor(vendedor, lista) {
+    const nome = String(vendedor.nombre || "").trim().toLowerCase();
+    const suyas = this.validas(lista).filter(
+      (v) =>
+        v.vendedorId === vendedor.id ||
+        (!v.vendedorId && String(v.vendedorNombre || "").trim().toLowerCase() === nome),
+    );
     const total = Utils.redondear(suyas.reduce((s, v) => s + v.valorFinal, 0));
     const num = suyas.length;
     const ticket = num > 0 ? Utils.redondear(total / num) : 0;
-    const vendedor = State.vendedores.find((x) => x.nombre === vendedorNombre);
-    const comisionPct = vendedor ? vendedor.comision : 0;
+    const comisionPct = vendedor.comision || 0;
     const comision = Utils.redondear(total * (comisionPct / 100));
-    const meta = vendedor ? vendedor.metaMensual : 0;
+    const meta = vendedor.metaMensual || 0;
     const mes = Utils.mesActual(Utils.ahora());
     const actualMes = Utils.redondear(
-      suyas
-        .filter((v) => Utils.claveMes(v.fecha) === mes)
-        .reduce((s, v) => s + v.valorFinal, 0),
+      suyas.filter((v) => Utils.claveMes(v.fecha) === mes).reduce((s, v) => s + v.valorFinal, 0),
     );
-    const pctMeta = meta > 0 ? Math.min(100, (actualMes / meta) * 100) : 0;
-    return { total, num, ticket, comision, comisionPct, meta, actualMes, pctMeta: Utils.redondear(pctMeta) };
+    const pctReal = meta > 0 ? (actualMes / meta) * 100 : 0;
+    return {
+      total,
+      num,
+      ticket,
+      comision,
+      comisionPct,
+      meta,
+      actualMes,
+      pctMeta: Utils.redondear(Math.min(100, pctReal)),
+      pctReal: Utils.redondear(pctReal),
+    };
+  },
+
+  /* Ranking completo da equipe (inclui quem ainda não vendeu) */
+  rankingEquipe(lista) {
+    const validas = this.validas(lista);
+    return State.vendedores
+      .map((vendedor) => ({ vendedor, ...this.resumenVendedor(vendedor, validas) }))
+      .sort((a, b) => b.total - a.total || a.vendedor.nombre.localeCompare(b.vendedor.nombre, "pt"));
   },
 };

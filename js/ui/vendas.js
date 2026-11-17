@@ -1,178 +1,194 @@
 /* ============================================================
-   PANTALLA VENTAS — formulario de registro con cálculo automático
+   TELA VENDAS — formulário de registro com cálculo automático.
+   Os campos são gerados uma vez e reutilizados no formulário de
+   nova venda (prefixo "nueva") e no modal de edição ("edit").
    ============================================================ */
 
 function camposVentaHtml(pre) {
   return `
-    <div class="field">
-      <label>Producto *</label>
-      <select id="${pre}_producto" onchange="productoCambio('${pre}')"></select>
+    <div class="field campo-largo">
+      <label for="${pre}_producto">Produto *</label>
+      <select id="${pre}_producto" data-change="produtoAlterado" data-pre="${pre}"></select>
+      <div class="hint" id="${pre}_estoqueInfo"></div>
     </div>
     <div class="field">
-      <label>Cantidad *</label>
-      <input type="number" id="${pre}_cantidad" min="1" step="1" value="1" oninput="calcularVenta('${pre}')" />
+      <label for="${pre}_cantidad">Quantidade *</label>
+      <input type="number" id="${pre}_cantidad" min="0" step="any" value="1" data-input="calcularVenda" data-pre="${pre}" />
     </div>
     <div class="field">
-      <label>Valor unitario (R$)</label>
-      <input type="number" id="${pre}_valorUnitario" min="0" step="0.01" oninput="calcularVenta('${pre}')" placeholder="0,00" />
+      <label for="${pre}_valorUnitario">Valor unitário (R$) *</label>
+      <input type="text" inputmode="decimal" id="${pre}_valorUnitario" data-input="valorUnitarioDigitado" data-pre="${pre}" placeholder="0,00" autocomplete="off" />
     </div>
     <div class="field">
-      <label>Descuento (R$)</label>
-      <input type="number" id="${pre}_descuento" min="0" step="0.01" value="0" oninput="calcularVenta('${pre}')" placeholder="0,00" />
+      <label for="${pre}_descuento">Desconto (R$)</label>
+      <input type="text" inputmode="decimal" id="${pre}_descuento" value="0" data-input="calcularVenda" data-pre="${pre}" placeholder="0,00" autocomplete="off" />
     </div>
     <div class="field">
-      <label>Valor final</label>
-      <input type="text" id="${pre}_valorFinal" readonly class="valor-final" placeholder="R$ 0,00" />
-    </div>
-    <div class="field">
-      <label>Vendedor *</label>
-      <select id="${pre}_vendedor"></select>
-    </div>
-    <div class="field">
-      <label>Forma de pago *</label>
+      <label for="${pre}_pagamento">Forma de pagamento *</label>
       <select id="${pre}_pagamento"></select>
     </div>
     <div class="field">
-      <label>Fecha y hora</label>
+      <label for="${pre}_vendedor">Vendedor *</label>
+      <select id="${pre}_vendedor" data-change="calcularVenda" data-pre="${pre}"></select>
+    </div>
+    <div class="field">
+      <label for="${pre}_fecha">Data e hora</label>
       <input type="datetime-local" id="${pre}_fecha" />
     </div>
     <div class="field campo-largo">
-      <label>Observación</label>
-      <input type="text" id="${pre}_observacion" maxlength="200" placeholder="Opcional" />
+      <label for="${pre}_observacion">Observações</label>
+      <input type="text" id="${pre}_observacion" maxlength="200" placeholder="Opcional" autocomplete="off" />
     </div>
   `;
 }
 
-const _valVenta = (pre, id) => document.getElementById(`${pre}_${id}`);
+function resumoVendaHtml(pre) {
+  return `
+    <dl class="resumo">
+      <div><dt>Subtotal</dt><dd id="${pre}_resBruto">R$ 0,00</dd></div>
+      <div><dt>Desconto</dt><dd id="${pre}_resDesc" class="neg">− R$ 0,00</dd></div>
+      <div class="resumo-total"><dt>Valor final</dt><dd id="${pre}_valorFinal">R$ 0,00</dd></div>
+      <div><dt>Comissão estimada</dt><dd id="${pre}_resComissao">—</dd></div>
+    </dl>
+    <div class="form-erro" id="${pre}_aviso" role="alert"></div>`;
+}
+
+const _cv = (pre, id) => document.getElementById(`${pre}_${id}`);
 
 function rellenarSelectsVenta(pre) {
-  const preProducto = _valVenta(pre, "producto");
-  const preVendedor = _valVenta(pre, "vendedor");
-  const valorProducto = preProducto ? preProducto.value : "";
-  const valorVendedor = preVendedor ? preVendedor.value : "";
+  const selP = _cv(pre, "producto");
+  const selV = _cv(pre, "vendedor");
+  if (!selP || !selV) return;
+  const valorProducto = selP.value;
+  const valorVendedor = selV.value;
 
-  llenarSelect(`${pre}_producto`, opcionesProductos(false), false, "Primero crea un producto");
-  llenarSelect(`${pre}_vendedor`, opcionesVendedores(), false, "Primero crea un vendedor");
+  /* No modal de edição, produtos inativos continuam disponíveis para não
+     trocar silenciosamente o produto de uma venda existente. */
+  llenarSelect(`${pre}_producto`, opcionesProductos(pre === "edit"), false, "Cadastre um produto primeiro");
+  llenarSelect(`${pre}_vendedor`, opcionesVendedores(), false, "Cadastre um vendedor primeiro");
   llenarSelect(`${pre}_pagamento`, FORMAS_PAGAMENTO, false);
 
-  const selP = _valVenta(pre, "producto");
-  const selV = _valVenta(pre, "vendedor");
-  if (selP && valorProducto) {
-    const existe = Array.from(selP.options).some((o) => o.value === valorProducto);
-    if (existe) selP.value = valorProducto;
-  }
-  if (selV && valorVendedor) {
-    const existe = Array.from(selV.options).some((o) => o.value === valorVendedor);
-    if (existe) selV.value = valorVendedor;
-  }
-  productoCambio(pre);
+  if (valorProducto && Array.from(selP.options).some((o) => o.value === valorProducto)) selP.value = valorProducto;
+  if (valorVendedor && Array.from(selV.options).some((o) => o.value === valorVendedor)) selV.value = valorVendedor;
+  aplicarProdutoSelecionado(pre, false);
 }
 
-/* Al elegir producto se sugiere el precio de venta configurado */
-function productoCambio(pre) {
-  const sel = _valVenta(pre, "producto");
-  const vu = _valVenta(pre, "valorUnitario");
+/* Sugere o preço de venda do produto, exceto se o usuário já digitou um valor */
+function aplicarProdutoSelecionado(pre, forcarPreco) {
+  const sel = _cv(pre, "producto");
+  const vu = _cv(pre, "valorUnitario");
   if (!sel || !vu) return;
-  const id = sel.value;
-  const p = State.productos.find((x) => x.id === id);
-  if (p && p.precioVenta > 0 && (!vu.dataset.autofillado || vu.value === "" || vu.value === "0")) {
-    vu.value = p.precioVenta.toFixed(2);
-    vu.dataset.autofillado = "1";
-  } else if (!p) {
+  const p = State.productos.find((x) => x.id === sel.value);
+  if (p && p.precioVenta > 0 && (forcarPreco || vu.dataset.manual !== "1" || vu.value.trim() === "")) {
+    vu.value = Utils.numeroParaCampo(p.precioVenta.toFixed(2));
+    vu.dataset.manual = "0";
+  } else if (!p && vu.dataset.manual !== "1") {
     vu.value = "";
   }
-  calcularVenta(pre);
+  calcularVenda(pre);
 }
 
-function calcularVenta(pre) {
-  const elFinal = _valVenta(pre, "valorFinal");
-  if (!elFinal) return;
+function calcularVenda(pre) {
+  const q = _cv(pre, "cantidad");
+  if (!q) return null;
   const calc = ServicioVentas.calcular({
-    cantidad: _valVenta(pre, "cantidad").value,
-    valorUnitario: _valVenta(pre, "valorUnitario").value,
-    descuento: _valVenta(pre, "descuento").value,
+    cantidad: q.value,
+    valorUnitario: _cv(pre, "valorUnitario").value,
+    descuento: _cv(pre, "descuento").value,
   });
-  elFinal.value = Utils.moneda(calc.valorFinal);
+  const set = (id, t) => {
+    const el = _cv(pre, id);
+    if (el) el.textContent = t;
+  };
+  set("resBruto", Utils.moneda(calc.bruto));
+  set("resDesc", "− " + Utils.moneda(Math.min(calc.descuento, calc.bruto || calc.descuento)));
+  set("valorFinal", Utils.moneda(calc.valorFinal));
+
+  const vend = State.vendedores.find((v) => v.id === (_cv(pre, "vendedor") || {}).value);
+  set("resComissao", vend && vend.comision > 0 ? `${Utils.moneda(calc.valorFinal * (vend.comision / 100))} (${Utils.percentual(vend.comision, 1)})` : "—");
+
+  const aviso = _cv(pre, "aviso");
+  if (aviso) aviso.textContent = calc.descuento > calc.bruto && calc.bruto > 0 ? "O desconto é maior que o valor bruto da venda." : "";
+
+  const prod = State.productos.find((x) => x.id === (_cv(pre, "producto") || {}).value);
+  const info = _cv(pre, "estoqueInfo");
+  if (info) {
+    if (!prod) info.textContent = "";
+    else if (prod.stock === null) info.textContent = "Produto sem controle de estoque.";
+    else info.textContent = `Estoque disponível: ${Utils.numero(prod.stock, 2)}`;
+  }
   return calc;
 }
 
 function leerCamposVenta(pre) {
   return {
-    productoId: _valVenta(pre, "producto").value,
-    cantidad: Utils.parsearNumero(_valVenta(pre, "cantidad").value),
-    valorUnitario: Utils.parsearNumero(_valVenta(pre, "valorUnitario").value),
-    descuento: Utils.parsearNumero(_valVenta(pre, "descuento").value) || 0,
-    pagamento: _valVenta(pre, "pagamento").value,
-    vendedorId: _valVenta(pre, "vendedor").value,
-    fecha: _valVenta(pre, "fecha").value,
-    observacion: _valVenta(pre, "observacion").value,
+    productoId: _cv(pre, "producto").value,
+    cantidad: Utils.parsearNumero(_cv(pre, "cantidad").value),
+    valorUnitario: Utils.parsearNumero(_cv(pre, "valorUnitario").value),
+    descuento: Utils.parsearNumero(_cv(pre, "descuento").value) || 0,
+    pagamento: _cv(pre, "pagamento").value,
+    vendedorId: _cv(pre, "vendedor").value,
+    fecha: _cv(pre, "fecha").value,
+    observacion: _cv(pre, "observacion").value,
   };
 }
 
+function _selecionar(sel, valor, rotuloFallback) {
+  if (Array.from(sel.options).some((o) => o.value === valor)) {
+    sel.value = valor;
+  } else {
+    /* Cadastro removido: obriga a escolher outro, sem trocar às escondidas */
+    const op = document.createElement("option");
+    op.value = "";
+    op.textContent = rotuloFallback;
+    sel.insertBefore(op, sel.firstChild);
+    sel.value = "";
+  }
+}
+
 function rellenarFormularioVenta(pre, venta) {
-  _valVenta(pre, "producto").value = venta.productoId;
-  _valVenta(pre, "cantidad").value = venta.cantidad;
-  _valVenta(pre, "valorUnitario").value = String(venta.valorUnitario).replace(".", ",");
-  _valVenta(pre, "valorUnitario").dataset.autofillado = "0";
-  _valVenta(pre, "descuento").value = venta.descuento > 0 ? String(venta.descuento).replace(".", ",") : "0";
-  _valVenta(pre, "valorFinal").value = Utils.moneda(venta.valorFinal);
-  _valVenta(pre, "vendedor").value = venta.vendedorId;
-  _valVenta(pre, "pagamento").value = venta.pagamento;
-  _valVenta(pre, "fecha").value = venta.fecha;
-  _valVenta(pre, "observacion").value = venta.observacion || "";
-  calcularVenta(pre);
+  _selecionar(_cv(pre, "producto"), venta.productoId, `${venta.productoNombre} (removido — selecione outro)`);
+  _cv(pre, "cantidad").value = venta.cantidad;
+  const vu = _cv(pre, "valorUnitario");
+  vu.value = Utils.numeroParaCampo(venta.valorUnitario);
+  vu.dataset.manual = "1"; // preserva o valor histórico da venda
+  _cv(pre, "descuento").value = venta.descuento > 0 ? Utils.numeroParaCampo(venta.descuento) : "0";
+  _selecionar(_cv(pre, "vendedor"), venta.vendedorId, `${venta.vendedorNombre} (removido — selecione outro)`);
+  _cv(pre, "pagamento").value = FORMAS_PAGAMENTO.includes(venta.pagamento) ? venta.pagamento : "Outros";
+  _cv(pre, "fecha").value = Utils.normalizarFecha(venta.fecha) || "";
+  _cv(pre, "observacion").value = venta.observacion || "";
+  calcularVenda(pre);
 }
 
 function limpiarFormularioVenta(pre) {
-  const d = Utils.ahora();
-  const preCantidad = _valVenta(pre, "cantidad");
-  if (preCantidad) preCantidad.value = "1";
-  const preVu = _valVenta(pre, "valorUnitario");
-  if (preVu) {
-    preVu.value = "";
-    preVu.dataset.autofillado = "0";
-  }
-  const preDesc = _valVenta(pre, "descuento");
-  if (preDesc) preDesc.value = "0";
-  const preObs = _valVenta(pre, "observacion");
-  if (preObs) preObs.value = "";
-  const preFecha = _valVenta(pre, "fecha");
-  if (preFecha) preFecha.value = d;
-  calcularVenta(pre);
-}
-
-function guardarNuevaVenta() {
-  const datos = leerCamposVenta("nueva");
-  const res = ServicioVentas.registrar(datos);
-  if (!res.ok) {
-    toast(res.error, "error");
-    return;
-  }
-  limpiarFormularioVenta("nueva");
-  atualizarTudo();
-  toast("Venta registrada", "exito");
+  const q = _cv(pre, "cantidad");
+  if (!q) return;
+  q.value = "1";
+  const vu = _cv(pre, "valorUnitario");
+  vu.value = "";
+  vu.dataset.manual = "0";
+  _cv(pre, "descuento").value = "0";
+  _cv(pre, "observacion").value = "";
+  _cv(pre, "fecha").value = Utils.ahora();
+  aplicarProdutoSelecionado(pre, true);
 }
 
 function atualizarListaReciente() {
-  const contenedor = document.getElementById("listaRecientes");
-  if (!contenedor) return;
-  const recientes = [...ServicioMetricas.validas()]
+  const el = document.getElementById("listaRecientes");
+  if (!el) return;
+  const recientes = [...State.ventas]
     .sort((a, b) => (b.fecha || "").localeCompare(a.fecha || ""))
     .slice(0, 5);
   if (!recientes.length) {
-    contenedor.innerHTML = estadoVacio(
-      "↗",
-      "Sin ventas aún",
-      "Registra la primera venta con el formulario superior.",
-    );
+    el.innerHTML = estadoVacio("receipt", "Nenhuma venda registrada", "Registre a primeira venda no formulário acima.");
     return;
   }
-  contenedor.innerHTML = recientes
+  el.innerHTML = recientes
     .map(
       (v) => `
-      <div class="row-card">
+      <div class="row-card ${v.estado === "anulada" ? "is-anulada" : ""}">
         <div class="row-main">
-          <div class="row-title">${Utils.esc(v.productoNombre)} <span class="badge badge-soft">×${v.cantidad}</span></div>
+          <div class="row-title">${Utils.esc(v.productoNombre)} <span class="badge badge-soft">×${Utils.numero(v.cantidad, 3)}</span>${v.estado === "anulada" ? ' <span class="badge badge-aviso">Anulada</span>' : ""}</div>
           <div class="row-sub">${Utils.fmtFechaHora(v.fecha)} · ${Utils.esc(v.vendedorNombre)} · ${Utils.esc(v.pagamento)}</div>
         </div>
         <div class="row-value">${Utils.moneda(v.valorFinal)}</div>
@@ -180,3 +196,22 @@ function atualizarListaReciente() {
     )
     .join("");
 }
+
+registrarAcoes({
+  /* Trocar o produto sempre sugere o preço do novo produto (editável depois) */
+  produtoAlterado: (ds) => aplicarProdutoSelecionado(ds.pre, true),
+  calcularVenda: (ds) => calcularVenda(ds.pre),
+  valorUnitarioDigitado: (ds, el) => {
+    el.dataset.manual = "1";
+    calcularVenda(ds.pre);
+  },
+  limparFormularioVenda: (ds) => limpiarFormularioVenta(ds.arg),
+
+  guardarNuevaVenta: async () => {
+    const res = await ServicioVentas.registrar(leerCamposVenta("nueva"));
+    if (!res.ok) return toast(res.error.message, "error");
+    limpiarFormularioVenta("nueva");
+    atualizarTudo();
+    toast("Venda registrada com sucesso.", "exito");
+  },
+});

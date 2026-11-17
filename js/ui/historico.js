@@ -1,6 +1,6 @@
 /* ============================================================
-   PANTALLA HISTÓRICO — búsqueda, filtros, orden, detalle,
-   edición, anulación y borrado de ventas.
+   TELA HISTÓRICO — pesquisa, filtros, ordenação, paginação,
+   detalhe, edição, anulação e exclusão de vendas.
    ============================================================ */
 
 const _HIS_POR_PAGINA = 12;
@@ -8,25 +8,30 @@ let _hisPagina = 1;
 let _editandoVentaId = null;
 
 function rellenarFiltrosHistorico() {
+  const guardar = ["hisVendedor", "hisProducto", "hisPago"].map((id) => [id, document.getElementById(id).value]);
   llenarSelect("hisVendedor", opcionesVendedores(), true, "Todos");
   llenarSelect("hisProducto", opcionesProductos(true), true, "Todos");
   llenarSelect("hisPago", FORMAS_PAGAMENTO, true, "Todas");
+  guardar.forEach(([id, v]) => {
+    const el = document.getElementById(id);
+    if (v && Array.from(el.options).some((o) => o.value === v)) el.value = v;
+  });
 }
 
 function filtraVentas() {
-  const busca = (
-    document.getElementById("hisBusca").value || ""
-  ).toLowerCase().trim();
-  const desde = document.getElementById("hisDesde").value;
-  const hasta = document.getElementById("hisHasta").value;
-  const vendedor = document.getElementById("hisVendedor").value;
-  const producto = document.getElementById("hisProducto").value;
-  const pago = document.getElementById("hisPago").value;
-  const orden = document.getElementById("hisOrden").value;
+  const val = (id) => document.getElementById(id).value;
+  const busca = (val("hisBusca") || "").toLowerCase().trim();
+  const desde = val("hisDesde");
+  const hasta = val("hisHasta");
+  const vendedor = val("hisVendedor");
+  const producto = val("hisProducto");
+  const pago = val("hisPago");
+  const estado = val("hisEstado");
+  const orden = val("hisOrden");
 
-  let lista = State.ventas.filter((v) => {
+  const lista = State.ventas.filter((v) => {
     if (busca) {
-      const texto = `${v.productoNombre} ${v.vendedorNombre} ${v.observacion}`.toLowerCase();
+      const texto = `${v.productoNombre} ${v.vendedorNombre} ${v.observacion} ${v.pagamento}`.toLowerCase();
       if (!texto.includes(busca)) return false;
     }
     if (desde && Utils.claveDia(v.fecha) < desde) return false;
@@ -34,6 +39,7 @@ function filtraVentas() {
     if (vendedor && v.vendedorId !== vendedor) return false;
     if (producto && v.productoId !== producto) return false;
     if (pago && v.pagamento !== pago) return false;
+    if (estado && v.estado !== estado) return false;
     return true;
   });
 
@@ -54,25 +60,27 @@ function filtraVentas() {
   return lista;
 }
 
-function _filaHistorico(v) {
-  const estadoBadge =
-    v.estado === "valida"
-      ? '<span class="badge badge-ok">Válida</span>'
-      : '<span class="badge badge-aviso">Anulada</span>';
+function _btnAcao(acao, id, titulo, icon, extra) {
+  return `<button type="button" class="btn btn-sm btn-icon ${extra || ""}" title="${titulo}" aria-label="${titulo}" data-acao="${acao}" data-id="${Utils.esc(id)}">${icone(icon)}</button>`;
+}
+
+function _linhaHistorico(v) {
+  const valida = v.estado === "valida";
+  const badge = valida ? '<span class="badge badge-ok">Válida</span>' : '<span class="badge badge-aviso">Anulada</span>';
   return `
-    <tr class="${v.estado === "anulada" ? "fila-anulada" : ""}">
-      <td class="td-fecha">${Utils.fmtFechaHora(v.fecha)}</td>
-      <td>${Utils.esc(v.productoNombre)}</td>
-      <td class="td-num">${v.cantidad}</td>
-      <td>${Utils.esc(v.vendedorNombre)}</td>
-      <td>${Utils.esc(v.pagamento)}</td>
-      <td class="td-valor">${Utils.moneda(v.valorFinal)}</td>
-      <td>${estadoBadge}</td>
-      <td class="td-acciones">
-        <button class="btn btn-sm btn-icon" title="Ver detalle" onclick="verDetalleVenta('${v.id}')">👁</button>
-        <button class="btn btn-sm btn-icon" title="Editar" onclick="abrirEdicionVenta('${v.id}')">✎</button>
-        <button class="btn btn-sm btn-icon" title="${v.estado === "valida" ? "Anular" : "Reactivar"}" onclick="alternarEstadoVenta('${v.id}')">${v.estado === "valida" ? "⊘" : "↺"}</button>
-        <button class="btn btn-sm btn-icon btn-danger-ghost" title="Eliminar" onclick="eliminarVenta('${v.id}')">✕</button>
+    <tr class="${valida ? "" : "fila-anulada"}">
+      <td data-label="Data" class="td-fecha">${Utils.fmtFechaHora(v.fecha)}</td>
+      <td data-label="Produto" class="td-principal">${Utils.esc(v.productoNombre)}</td>
+      <td data-label="Qtd." class="num">${Utils.numero(v.cantidad, 3)}</td>
+      <td data-label="Vendedor">${Utils.esc(v.vendedorNombre)}</td>
+      <td data-label="Pagamento">${Utils.esc(v.pagamento)}</td>
+      <td data-label="Valor" class="num td-valor">${Utils.moneda(v.valorFinal)}</td>
+      <td data-label="Situação">${badge}</td>
+      <td class="acoes">
+        ${_btnAcao("verDetalheVenda", v.id, "Ver detalhes", "eye")}
+        ${_btnAcao("editarVenda", v.id, "Editar venda", "edit")}
+        ${_btnAcao("alternarEstadoVenda", v.id, valida ? "Anular venda" : "Revalidar venda", valida ? "ban" : "undo")}
+        ${_btnAcao("excluirVenda", v.id, "Excluir venda", "trash", "btn-danger-ghost")}
       </td>
     </tr>`;
 }
@@ -85,148 +93,146 @@ function atualizarHistorico() {
   const inicio = (_hisPagina - 1) * _HIS_POR_PAGINA;
   const pagina = lista.slice(inicio, inicio + _HIS_POR_PAGINA);
 
-  const info = document.getElementById("hisInfo");
-  if (info)
-    info.textContent = `${total} venta(s) encontrada(s) · página ${_hisPagina} de ${paginas}`;
-
-  const prev = document.getElementById("hisPrev");
-  const next = document.getElementById("hisNext");
-  if (prev) prev.disabled = _hisPagina <= 1;
-  if (next) next.disabled = _hisPagina >= paginas;
+  const soma = Utils.redondear(lista.filter((v) => v.estado === "valida").reduce((s, v) => s + v.valorFinal, 0));
+  document.getElementById("hisInfo").textContent = total
+    ? `${total} venda(s) encontrada(s) · Total das válidas: ${Utils.moneda(soma)}`
+    : "Nenhuma venda encontrada";
+  document.getElementById("hisPaginaInfo").textContent = `Página ${_hisPagina} de ${paginas}`;
+  document.getElementById("hisPrev").disabled = _hisPagina <= 1;
+  document.getElementById("hisNext").disabled = _hisPagina >= paginas;
 
   const cuerpo = document.getElementById("cuerpoHistorico");
-  if (!cuerpo) return;
   if (!total) {
-    cuerpo.innerHTML = `<tr><td colspan="8">${estadoVacio(
-      "↗",
-      "Sin resultados",
-      "Ajusta los filtros o registra ventas para verlas aquí.",
+    cuerpo.innerHTML = `<tr class="linha-vazia"><td colspan="8">${estadoVacio(
+      "historico",
+      State.ventas.length ? "Nenhum resultado" : "Nenhuma venda registrada",
+      State.ventas.length ? "Ajuste os filtros para ver outras vendas." : "As vendas registradas aparecerão aqui.",
     )}</td></tr>`;
     return;
   }
-  cuerpo.innerHTML = pagina.map(_filaHistorico).join("");
+  cuerpo.innerHTML = pagina.map(_linhaHistorico).join("");
 }
 
-function cambiarPaginaHistorico(delta) {
-  _hisPagina = Math.max(1, _hisPagina + delta);
-  atualizarHistorico();
+function _ventaPorId(ds) {
+  return State.ventas.find((x) => x.id === ds.id);
 }
 
-function limpiarFiltrosHistorico() {
-  const ids = ["hisBusca", "hisDesde", "hisHasta", "hisVendedor", "hisProducto", "hisPago", "hisOrden"];
-  ids.forEach((id) => {
-    const el = document.getElementById(id);
-    if (el) el.value = "";
-  });
-  _hisPagina = 1;
-  atualizarHistorico();
-}
+registrarAcoes({
+  filtrosHistorico: () => {
+    _hisPagina = 1;
+    atualizarHistorico();
+  },
 
-function verDetalleVenta(id) {
-  const v = State.ventas.find((x) => x.id === id);
-  if (!v) return;
-  const filas = [
-    ["Fecha y hora", Utils.fmtFechaHora(v.fecha)],
-    ["Producto", `${v.productoNombre} (cantidad ${v.cantidad})`],
-    ["Valor unitario", Utils.moneda(v.valorUnitario)],
-    ["Descuento", Utils.moneda(v.descuento)],
-    ["Valor final", Utils.moneda(v.valorFinal)],
-    ["Vendedor", v.vendedorNombre],
-    ["Forma de pago", v.pagamento],
-    ["Estado", v.estado === "valida" ? "Válida" : "Anulada"],
-    ["Observación", v.observacion || "—"],
-  ];
-  const contenedor = document.getElementById("detalleContenido");
-  contenedor.innerHTML = filas
-    .map(
-      ([k, val]) =>
-        `<div class="detalle-fila"><span>${Utils.esc(k)}</span><strong>${Utils.esc(val)}</strong></div>`,
-    )
-    .join("");
-  abrirModal("modalDetalleVenta");
-}
+  paginaHistorico: (ds) => {
+    _hisPagina = Math.max(1, _hisPagina + Number(ds.arg));
+    atualizarHistorico();
+  },
 
-function abrirEdicionVenta(id) {
-  const v = State.ventas.find((x) => x.id === id);
-  if (!v) return;
-  _editandoVentaId = v.id;
-  document.getElementById("modalVentaTitulo").textContent = "Editar venta";
-  rellenarSelectsVenta("edit");
-  rellenarFormularioVenta("edit", v);
-  abrirModal("modalVenta");
-}
+  limparFiltrosHistorico: () => {
+    ["hisBusca", "hisDesde", "hisHasta", "hisVendedor", "hisProducto", "hisPago", "hisEstado"].forEach((id) => {
+      document.getElementById(id).value = "";
+    });
+    document.getElementById("hisOrden").value = "reciente";
+    _hisPagina = 1;
+    atualizarHistorico();
+  },
 
-function guardarEdicionVenta() {
-  if (!_editandoVentaId) return;
-  const datos = leerCamposVenta("edit");
-  const res = ServicioVentas.actualizar(_editandoVentaId, datos);
-  if (!res.ok) {
-    toast(res.error, "error");
-    return;
-  }
-  _editandoVentaId = null;
-  cerrarModal("modalVenta");
-  atualizarTudo();
-  toast("Venta actualizada", "exito");
-}
+  verDetalheVenda: (ds) => {
+    const v = _ventaPorId(ds);
+    if (!v) return;
+    const filas = [
+      ["Data e hora", Utils.fmtFechaHora(v.fecha)],
+      ["Produto", `${v.productoNombre} (quantidade ${Utils.numero(v.cantidad, 3)})`],
+      ["Valor unitário", Utils.moneda(v.valorUnitario)],
+      ["Desconto", Utils.moneda(v.descuento)],
+      ["Valor final", Utils.moneda(v.valorFinal)],
+      ["Vendedor", v.vendedorNombre],
+      ["Forma de pagamento", v.pagamento],
+      ["Situação", v.estado === "valida" ? "Válida" : "Anulada"],
+      ["Observações", v.observacion || "—"],
+    ];
+    document.getElementById("detalleContenido").innerHTML = filas
+      .map(([k, val]) => `<div class="detalhe-linha"><span>${Utils.esc(k)}</span><strong>${Utils.esc(val)}</strong></div>`)
+      .join("");
+    abrirModal("modalDetalleVenta");
+  },
 
-function eliminarVenta(id) {
-  const v = State.ventas.find((x) => x.id === id);
-  if (!v) return;
-  confirmarAccion(
-    "Eliminar venta",
-    `Se eliminará la venta de ${v.productoNombre} por ${Utils.moneda(v.valorFinal)}. Esta acción no se puede deshacer.`,
-    () => {
-      const res = ServicioVentas.eliminar(id);
-      if (res.ok) {
-        atualizarTudo();
-        toast("Venta eliminada");
-      } else {
-        toast(res.error, "error");
-      }
-    },
-    "Eliminar",
-  );
-}
+  editarVenda: (ds) => {
+    const v = _ventaPorId(ds);
+    if (!v) return;
+    _editandoVentaId = v.id;
+    document.getElementById("modalVentaTitulo").textContent = "Editar venda";
+    document.getElementById("erroVenta").textContent = "";
+    rellenarSelectsVenta("edit");
+    rellenarFormularioVenta("edit", v);
+    abrirModal("modalVenta");
+  },
 
-function alternarEstadoVenta(id) {
-  const v = State.ventas.find((x) => x.id === id);
-  if (!v) return;
-  if (v.estado === "valida") {
-    confirmarAccion(
-      "Anular venta",
-      `La venta de ${v.productoNombre} se marcará como anulada y se devolverá el stock. No contará en las métricas.`,
-      () => {
-        const res = ServicioVentas.anular(id);
-        if (res.ok) {
-          atualizarTudo();
-          toast("Venta anulada");
-        } else {
-          toast(res.error, "error");
-        }
-      },
-      "Anular",
-    );
-  } else {
-    const res = ServicioVentas.revalidar(id);
-    if (res.ok) {
-      atualizarTudo();
-      toast("Venta reactivada", "exito");
-    } else {
-      toast(res.error, "error");
+  guardarEdicionVenta: async () => {
+    if (!_editandoVentaId) return;
+    const res = await ServicioVentas.actualizar(_editandoVentaId, leerCamposVenta("edit"));
+    if (!res.ok) {
+      document.getElementById("erroVenta").textContent = res.error.message;
+      return toast(res.error.message, "error");
     }
-  }
-}
+    _editandoVentaId = null;
+    cerrarModal("modalVenta");
+    atualizarTudo();
+    toast("Venda atualizada.", "exito");
+  },
 
-function eliminarTodasVentas() {
-  confirmarAccion(
-    "Eliminar todas las ventas",
-    "Se eliminará TODO el historial de ventas y se devolverá el stock de las ventas válidas. Esta acción no se puede deshacer.",
-    () => {
-      ServicioVentas.eliminarTodas();
+  excluirVenda: (ds) => {
+    const v = _ventaPorId(ds);
+    if (!v) return;
+    const id = v.id;
+    confirmarAccion(
+      "Excluir venda",
+      `A venda de ${v.productoNombre} no valor de ${Utils.moneda(v.valorFinal)} será excluída${v.estado === "valida" ? " e o estoque será devolvido" : ""}. Esta ação não pode ser desfeita. Se quiser preservar o histórico, use "Anular".`,
+      async () => {
+        const res = await ServicioVentas.eliminar(id);
+        if (!res.ok) return toast(res.error.message, "error");
+        atualizarTudo();
+        toast("Venda excluída.");
+      },
+      "Excluir",
+    );
+  },
+
+  alternarEstadoVenda: async (ds) => {
+    const v = _ventaPorId(ds);
+    if (!v) return;
+    const id = v.id;
+    if (v.estado === "valida") {
+      confirmarAccion(
+        "Anular venda",
+        `A venda de ${v.productoNombre} será marcada como anulada e o estoque será devolvido. Ela deixa de contar nas métricas, mas continua no histórico.`,
+        async () => {
+          const res = await ServicioVentas.anular(id);
+          if (!res.ok) return toast(res.error.message, "error");
+          atualizarTudo();
+          toast("Venda anulada.");
+        },
+        "Anular venda",
+      );
+    } else {
+      const res = await ServicioVentas.revalidar(id);
+      if (!res.ok) return toast(res.error.message, "error");
       atualizarTudo();
-      toast("Historial eliminado");
-    },
-    "Eliminar todo",
-  );
-}
+      toast("Venda revalidada.", "exito");
+    }
+  },
+
+  eliminarTodasVentas: () => {
+    confirmarAccion(
+      "Excluir todas as vendas",
+      "TODO o histórico de vendas será excluído e o estoque das vendas válidas será devolvido. Esta ação não pode ser desfeita.",
+      async () => {
+        const res = await ServicioVentas.eliminarTodas();
+        if (!res.ok) return toast(res.error.message, "error");
+        atualizarTudo();
+        toast("Histórico excluído.");
+      },
+      "Excluir tudo",
+    );
+  },
+});

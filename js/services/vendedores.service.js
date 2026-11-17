@@ -1,5 +1,5 @@
 /* ============================================================
-   SERVICIO DE VENDEDORES — reglas de negocio (independiente de UI)
+   SERVIÇO DE VENDEDORES — regras de negócio (independente da UI)
    ============================================================ */
 
 const ServicioVendedores = {
@@ -13,58 +13,77 @@ const ServicioVendedores = {
     };
   },
 
-  _validar(v) {
-    if (!v.nombre) return "El nombre es obligatorio.";
+  _validar(v, idExcluido) {
+    if (!v.nombre) return "O nome é obrigatório.";
+    if (v.nombre.length > LIMITES.nome) return `O nome pode ter no máximo ${LIMITES.nome} caracteres.`;
+    if (v.cargo.length > LIMITES.texto) return `O cargo pode ter no máximo ${LIMITES.texto} caracteres.`;
+    if (v.metaMensual > LIMITES.valorMax) return "Meta informada é grande demais.";
+    if (v.foto && !Utils.urlSegura(v.foto)) return "A foto deve ser um link http(s) válido.";
+    if (State.vendedores.some((x) => x.id !== (idExcluido || "") && x.nombre.trim().toLowerCase() === v.nombre.toLowerCase())) {
+      return "Já existe um vendedor com este nome.";
+    }
     return null;
   },
 
-  crear(datos) {
+  async crear(datos) {
     const v = this._normalizar(datos);
     const error = this._validar(v);
-    if (error) return { ok: false, error };
+    if (error) return Resultado.erro("validacao", error);
     v.id = Utils.id();
-    State.vendedores.push(v);
-    State.guardarVendedores();
-    return { ok: true, vendedor: v };
+    return State.executar(
+      ["vendedores"],
+      () => {
+        State.vendedores.push(v);
+        return Resultado.ok({ vendedor: v });
+      },
+      { entidade: "vendedor", acao: "criar", id: v.id },
+    );
   },
 
-  actualizar(id, datos) {
-    const idx = State.vendedores.findIndex((x) => x.id === id);
-    if (idx < 0) return { ok: false, error: "Vendedor no encontrado." };
+  async actualizar(id, datos) {
+    if (!State.vendedores.some((x) => x.id === id)) return Resultado.erro("nao_encontrado", "Vendedor não encontrado.");
     const v = this._normalizar(datos);
-    const error = this._validar(v);
-    if (error) return { ok: false, error };
-    const anterior = State.vendedores[idx];
-    /* Si cambia el nombre, se actualizan las ventas asociadas */
-    State.vendedores[idx] = { ...anterior, ...v };
-    if (anterior.nombre !== v.nombre) {
-      State.ventas.forEach((venta) => {
-        if (venta.vendedorId === id) venta.vendedorNombre = v.nombre;
-      });
-    }
-    State.guardarVendedores();
-    State.guardarVentas();
-    return { ok: true, vendedor: State.vendedores[idx] };
+    const error = this._validar(v, id);
+    if (error) return Resultado.erro("validacao", error);
+    return State.executar(
+      ["vendedores", "ventas"],
+      () => {
+        const idx = State.vendedores.findIndex((x) => x.id === id);
+        const anterior = State.vendedores[idx];
+        State.vendedores[idx] = { ...anterior, ...v };
+        /* Se o nome mudou, atualiza o nome exibido nas vendas associadas */
+        if (anterior.nombre !== v.nombre) {
+          State.ventas.forEach((venta) => {
+            if (venta.vendedorId === id) venta.vendedorNombre = v.nombre;
+          });
+        }
+        return Resultado.ok({ vendedor: State.vendedores[idx] });
+      },
+      { entidade: "vendedor", acao: "atualizar", id },
+    );
   },
 
-  /* Comportamiento existente: al eliminar un vendedor también se
-     eliminan sus ventas y se devuelve el stock de las válidas. */
-  eliminar(id) {
-    const idx = State.vendedores.findIndex((x) => x.id === id);
-    if (idx < 0) return { ok: false, error: "Vendedor no encontrado." };
-    const idVendedor = State.vendedores[idx].id;
-    const antes = State.ventas.length;
-    State.ventas.forEach((venta) => {
-      if (venta.vendedorId === idVendedor && venta.estado === "valida") {
-        ServicioVentas._aplicarStock(venta.productoId, -venta.cantidad);
-      }
-    });
-    State.ventas = State.ventas.filter((venta) => venta.vendedorId !== idVendedor);
-    State.vendedores.splice(idx, 1);
-    State.guardarVentas();
-    State.guardarProductos();
-    State.guardarVendedores();
-    return { ok: true, ventasRemovidas: antes - State.ventas.length };
+  /* Comportamento existente (preservado): ao excluir um vendedor, suas
+     vendas também são excluídas e o estoque das válidas é devolvido.
+     Pendência registrada: no backend, preferir inativar o vendedor para
+     não destruir histórico financeiro. */
+  async eliminar(id) {
+    if (!State.vendedores.some((x) => x.id === id)) return Resultado.erro("nao_encontrado", "Vendedor não encontrado.");
+    return State.executar(
+      ["vendedores", "ventas", "productos"],
+      () => {
+        const antes = State.ventas.length;
+        State.ventas.forEach((venta) => {
+          if (venta.vendedorId === id && venta.estado === "valida") {
+            ServicioVentas._aplicarStock(venta.productoId, -venta.cantidad);
+          }
+        });
+        State.ventas = State.ventas.filter((venta) => venta.vendedorId !== id);
+        State.vendedores.splice(State.vendedores.findIndex((x) => x.id === id), 1);
+        return Resultado.ok({ ventasRemovidas: antes - State.ventas.length });
+      },
+      { entidade: "vendedor", acao: "excluir", id },
+    );
   },
 
   obtener(id) {
